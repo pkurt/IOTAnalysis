@@ -84,7 +84,7 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxx')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
