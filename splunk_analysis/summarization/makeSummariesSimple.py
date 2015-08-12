@@ -49,6 +49,8 @@ def main (argv):
              {'inVariable': 'RunningMode', 'outVariable': 'avgRunningMode', 'function': 'avg'},
              {'inVariable': 'OutsideTemp', 'outVariable': 'maxOutsideTemp', 'function': 'max'},
              {'inVariable': 'OutsideTemp', 'outVariable': 'minOutsideTemp', 'function': 'min'}]
+    
+    
     searchReader = doSplunkSummarizationSearch(thermostatId, startTime, endTime, span, summariesToDo)
     print 'searchReader is '
     print searchReader

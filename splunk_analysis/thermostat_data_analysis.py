@@ -21,6 +21,11 @@ from email.mime.text import MIMEText
 import datetime
 
 
+#def fixBrokenTimeFormat(dtString):
+#    #### Example :
+#    #2014-11-18T00:00:00.000-08:00
+#    return dtString[:19]
+
 # Add functions below!
 def main (argv):
     start_time = time.time()
@@ -32,6 +37,7 @@ def main (argv):
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
 
     searchReader = doSplunkSearch(thermostatId, StartTime, EndTime)
+
     #print 'now getPandasDF'
     sys.stdout.flush()
     myDataDF = getPandasDF(searchReader)
@@ -45,6 +51,17 @@ def main (argv):
     sys.stdout.flush()
     print 'It took ', str(runtime), ' to run'
     sys.stdout.flush()
+
+### added new
+    outFileName = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.json'
+    columnsToSave = ['beginRunTime', 'endRunTime', 'duration', 'performance']
+           #thisRunPeriod = {'beginRunTime': runParameters['beginRunTime'], 'endRunTime': runParameters['endRunTime'],
+           #         'duration': runParameters['duration'], 'performance': runParameters['performance']}
+    dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName)
+
+
+
+
 
 def getRunPeriodDF(myDataDF):
     listOfRunPeriods = []
@@ -127,7 +144,7 @@ def doSplunkSearch(thermostatId, StartTime, EndTime):
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxxx')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
@@ -136,7 +153,6 @@ def doSplunkSearch(thermostatId, StartTime, EndTime):
    # print 'jobSearchName: ', jobSearchString
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
     reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
-    #reader = results.ResultsReader(job_results)
     return reader
 
 def dashboard_performance_plots(myDataDF, runPeriodDF):
@@ -197,12 +213,41 @@ def getRunParameters(eventsInThisRun):
     outsideTemps = [event['OutsideTemp'] for event in eventsInThisRun]
     runParameters['performance'] = getPerformance(insideTemps, outsideTemps, runParameters['duration'])
     return runParameters
+    
+    
+
+### added new
+def dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName):
+    outFile = open(outFileName, 'w')
+    for idx, row in runPeriodDF.iterrows():
+        jsonString = '{"id": '+str(thermostatId)
+        jsonString += ', "dataType": "runPeriod"'
+        for column in columnsToSave:
+            jsonString += ', "'+column+'": '+str(row[column])
+        jsonString += '},\n'
+        outFile.write(jsonString)
+    outFile.close()
+
+        
+#        print 'line: ', line
+#        jsonString += ', "timeStamp": "'+ fixBrokenTimeFormat(line['_time'])+'", '
+#        for idx, summary in enumerate(summariesToDo):
+#            varName = summary['outVariable']
+#            jsonString += '"' + varName + '":'+line[varName]
+#            if idx != len(summariesToDo)-1:
+#                jsonString += ', '
+#        jsonString += '},'
+
+
+
+
+
 
 #def checkForAlert(myDataDF, runPeriodDF):
 def checkForAlert(myDataDF, runParameters):
     print 'checkforAlert'
     myEmail = 'pelin.kurt.4d@gmail.com'
-    myPassword='Pg18december'
+    myPassword='xxxxxx'
     #eMailAddresses=['pelin.kurt.4d@gmail.com', 'mwchaney@gmail.com', 'scott@salusinc.com']
     eMailAddresses=['pelin.kurt.4d@gmail.com']
 
@@ -214,16 +259,6 @@ def checkForAlert(myDataDF, runParameters):
         msgSubject = 'Alarm testing!!!'
         #makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses)
 
-#def makeAlert(msgText, myEmail, myPassword, eMailAddresses):
-#    print 'makeAlert'
-#    recipientEmails=", ".join(eMailAddresses)
-#    print 'prepare message to send'
-#    server = smtplib.SMTP('smtp.gmail.com:587')
-#    server.ehlo()
-#    server.starttls()
-#    server.login(myEmail, myPassword)
-#    server.sendmail(myEmail, recipientEmails, msgText)
-#    server.quit()
 
 def makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses):
     print 'makeAlert'
