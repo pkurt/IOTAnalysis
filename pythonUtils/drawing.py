@@ -48,7 +48,7 @@ def getPlotFrame(plotOptionsDict):
     if 'yLabelSize' in plotOptionsDict.keys():
         ax.yaxis.label.set_fontsize(plotOptionsDict['yLabelSize'])
     if 'y_limit' in plotOptionsDict.keys():
-        print 'set the y_limit'
+        #print 'set the y_limit'
         ax.set_ylim(plotOptionsDict['y_limit'])
     if 'x_limit' in plotOptionsDict.keys():
         ax.set_xlim(plotOptionsDict['x_limit'])
@@ -100,7 +100,7 @@ def overlayChartsFromPandasDF(plt, pandasDF, xKey, chartOptionsDict, plotOptions
       End of function: return without closing plotting frame
     '''
 
-    print 'start of overlay, definitions to do are: ', chartOptionsDict
+    #print 'start of overlay, definitions to do are: ', chartOptionsDict
     if xKey not in pandasDF.keys():
         print 'Error, xKey ', xKey, ' does not exist. Exiting.'
         return 1
@@ -114,12 +114,12 @@ def overlayChartsFromPandasDF(plt, pandasDF, xKey, chartOptionsDict, plotOptions
     myDateValues = [convertDatetime64ToDatetime(ele) for ele in myDateValues]
     #myDateValues = [ele.astype(datetime.datetime) for ele in myDateValues]
   #  print 'values are : ', myDateValues, ', values are ', type(myDateValues[0])
-    print 'iterate over chartOptionsDict: ', chartOptionsDict
+    #print 'iterate over chartOptionsDict: ', chartOptionsDict
     drawLegOutputs = []
     drawLegLabels = []
     for yKey, chartOptions in chartOptionsDict.iteritems():
     #for yKey, chartOptions in pandasDF.keys():
-        print 'print-y-values, yKey: ', yKey
+       # print 'print-y-values, yKey: ', yKey
         # We will draw each chart in these options
         if yKey not in pandasDF.keys():
             print 'Warning, yKey ', yKey, ' does not exist. Skip it.'
@@ -137,7 +137,7 @@ def overlayChartsFromPandasDF(plt, pandasDF, xKey, chartOptionsDict, plotOptions
         if 'type' in chartOptions.keys() and chartOptions['type'] == 'bar':
             xBinWidths = [myDates[j+1]-myDates[j] for j in range(len(myDates)-1)] + [myDates[-1]-myDates[-2]]
             #### enforce max bar width
-            print 'myDates are: ', myDates, ', now getWidths'
+            #print 'myDates are: ', myDates, ', now getWidths'
             if 'maxBarWidth' in chartOptions.keys():
                 xBinWidths = [min(chartOptions['maxBarWidth'], ele) for ele in xBinWidths]
             maxBarWidth = chartOptions['maxBarWidth'] if 'maxBarWidth' in chartOptions.keys() else None
@@ -145,7 +145,13 @@ def overlayChartsFromPandasDF(plt, pandasDF, xKey, chartOptionsDict, plotOptions
 
             drawOutput = ax.bar(myDates, pandasDF[yKey], color=color, width=xBinWidths)
         else:
-            drawOutput = ax.plot(myDates, pandasDF[yKey], linestyle=linestyle, color=color, linewidth=linewidth)
+            #print 'myDates: ', myDates
+            #print 'yKey: ', yKey
+            #print 'pandasDF[yKey]: ', pandasDF[yKey].values
+            #print 'linestyle: ', linestyle
+            #print 'color: ', color
+            #print 'linewidth: ', linewidth
+            drawOutput = ax.plot(myDates, pandasDF[yKey].values, linestyle=linestyle, color=color, linewidth=linewidth)
         ax.xaxis_date()
         drawLegOutputs.append(drawOutput[0])
         if 'desc' in chartOptions.keys(): drawLegLabels.append(chartOptions['desc'])

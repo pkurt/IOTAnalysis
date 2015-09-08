@@ -22,6 +22,9 @@ import io
 from email.mime.text import MIMEText
 import datetime
 
+# To identify the test starting point I look for spike in the power.
+# You will look for 5% increase of the whole house power which you get from the side bands.
+# We can also develop a more sophisticated algorithm. We can apply fit to the side band to estimate the bkg.
 def getPeaks(dataDF):
     def getPeakArea(peakInfoObject, dataDF):
         def getRealPeakBounds(peakInfoObject, dataDF, tolerance=0.05):

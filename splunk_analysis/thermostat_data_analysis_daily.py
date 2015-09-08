@@ -21,6 +21,10 @@ import io
 from email.mime.text import MIMEText
 import collections
 
+def filterData(dataDF):
+    ''' Suggested filter: remove days with no runtime, such as
+        avgDuration < 0.000001 '''
+    return dataDF[dataDF['avgDuration']>0.000001]
 
 # Add your function below!
 #def main (thermostatId, StartTime, EndTime, DataType):
@@ -39,12 +43,16 @@ def main (argv):
     #print 'now getPandasDF'
     sys.stdout.flush()
     myDataDF = getPandasDF(searchReader)
+    print 'after filter, dataDF: ', myDataDF
     sys.stdout.flush()
 #    print 'now getRunPeriodDF'
 #    runPeriodDF = getRunPeriodDF(myDataDF)
     #print 'runPeriodDF is ', runPeriodDF
     dashboard_performance_plots(myDataDF)
     #checkForAlert(myDataDF, runPeriodDF)
+    checkForAlert(myDataDF)
+
+    
     #print 'runPeriodDF: ', runPeriodDF
     runtime = time.time() - start_time
     sys.stdout.flush()
@@ -74,25 +82,26 @@ def main (argv):
 #    return runPeriodDF
 
 def getPandasDF(searchReader):
-    print 'getPandasDF'
+    #print 'getPandasDF'
     myData = []
-    print 'read data in getPandasDF'
+    #print 'read data in getPandasDF'
     sys.stdout.flush()
 
 
     lineNum = 0
     #print 'searchReader has type: ', type(searchReader)
     for line in searchReader:
-#        print 'line: ', line
-#        if lineNum % 50 == 0: print 'lineNum: ', lineNum
-        #prevLine = cp.deepcopy(line)
-        #thisDict = ast.literal_eval(line['_raw'])
-        thisDict = json.loads(line['_raw'])
-        myData.append(thisDict)
+        #print 'line: ', line
+        #thisDict = json.loads(line['_raw'])
+        #myData.append(thisDict)
+        myData.append(line)
         lineNum += 1
         #print 'this row is: ', thisDict
         #print 'thisInsideTemp is: ', thisDict['InsideTemp']
     myDataDF = pd.DataFrame(myData)
+    varsToBeFloats = ['maxInsideTemp', 'avgInsideTemp', 'minInsideTemp', 'maxOutsideTemp',
+            'avgOutsideTemp', 'minOutsideTemp', 'avgSetPoint', 'avgRunningMode', 'avgPerformance', 'avgDuration', 'numCycles']
+    myDataDF[varsToBeFloats] = myDataDF[varsToBeFloats].astype(float)
     myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
    # print 'sort data in getPandasDF'
     sys.stdout.flush()
@@ -110,12 +119,13 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxx')
+    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
                     "count": 0}
-    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort _time "
+    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort _time |"+\
+                      " table timeStamp maxInsideTemp avgInsideTemp minInsideTemp maxOutsideTemp avgOutsideTemp minOutsideTemp avgSetPoint avgRunningMode avgPerformance avgDuration numCycles"
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
    # print 'jobSearchName: ', jobSearchString
     reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
@@ -124,9 +134,11 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
 
 
 def dashboard_performance_plots(myDataDF):
-    print 'Now make plots for ', myDataDF
+    #print 'Now make plots for ', myDataDF
     xKey='timeStamp'
-    myPdf = PdfPages('AggregatedResultsFromId20.pdf')
+    myPdf = PdfPages('AggregatedResultsFromId30.pdf')
+    
+    # draw avgTemperatures
     chartOptionsDict = collections.OrderedDict([
                         ('maxInsideTemp', {'color': 'mediumturquoise', 'style': '--', 'desc': 'DayMaxInsideTemp', 'linewidth':6}),
                         ('avgInsideTemp', {'color': 'mediumturquoise', 'style': '-', 'desc': 'DayAvgInsideTemp', 'linewidth':6}),
@@ -139,15 +151,22 @@ def dashboard_performance_plots(myDataDF):
     plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Temperature', 'grid': True, 'doDates': True, 'figsize': (20,10),
         'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 35, 'yLabelSize': 35, 'xMarginXtra': 10.0,
         'y_limit': [20,150]}
-    print 'datetime values are: ', myDataDF[xKey]
+
+  #  print 'datetime values are: ', myDataDF[xKey]
+
     drawLegOutputs, drawLegLabels = drawing.overlayChartsFromPandasDF(plt, myDataDF, xKey, chartOptionsDict,plotOptionsDict)
     plt.legend(drawLegOutputs, drawLegLabels, prop={'size':28})
     #plt.show()
     myPdf.savefig()
     plt.close()
+
+    #### Run the Suggested filter functions: remove days with no runtime, such as avgDuration < 0.000001
+    myDataDF = filterData(myDataDF)
+
+
     
-    #    ### now do runPeriodDF
-    print 'Will draw average running time'
+    # draw now  avgRunningMode
+    #print 'Will draw average running time'
     chartOptionsDict = {'avgRunningMode': {'type': 'bar', 'color': 'gold', 'style': '-'}}
     plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Fraction Run Time', 'grid': True, 'doDates': True, 'figsize': (20,10),
         'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 35, 'yLabelSize': 35, 'xMarginXtra': 2.0}
@@ -155,36 +174,53 @@ def dashboard_performance_plots(myDataDF):
     myPdf.savefig()
     plt.close()
     
-#    print 'Now draw performance plot'
-#    chartOptionsDict = {'performance': {'type': 'bar', 'color': 'lightseagreen', 'style': '-'}}
-#    plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Performance', 'grid': True, 'doDates': True,'figsize': (20,10),
-#        'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 28, 'yLabelSize': 28, 'xMarginXtra': 2.0}
-#    drawing.overlayChartsFromPandasDF(plt, runPeriodDF, 'beginRunTime', chartOptionsDict, plotOptionsDict)
-#    myPdf.savefig()
-#    plt.close()
+    # draw  avgPerformance plot
+    chartOptionsDict = {'avgPerformance': {'type': 'bar', 'color': 'lightseagreen', 'style': '-'}}
+    plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'avgPerformance', 'grid': True, 'doDates': True,'figsize': (20,10),
+        'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 28, 'yLabelSize': 28, 'xMarginXtra': 2.0}
+    drawOutput = drawing.overlayChartsFromPandasDF(plt, myDataDF, xKey, chartOptionsDict, plotOptionsDict)
+    myPdf.savefig()
+    plt.close()
+   
+    #draw avgDuration plot
+    chartOptionsDict = {'avgDuration': {'type': 'bar', 'color': 'pink', 'style': '-'}}
+    plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'avgDuration [minute]', 'grid': True, 'doDates': True,'figsize': (20,10),
+       'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 28, 'yLabelSize': 28, 'xMarginXtra': 2.0}
+    drawOutput = drawing.overlayChartsFromPandasDF(plt, myDataDF, xKey, chartOptionsDict, plotOptionsDict)
+    myPdf.savefig()
+    plt.close()
+
+
+    #draw numCycles plot
+    chartOptionsDict = {'numCycles': {'type': 'bar', 'color': 'blue', 'style': '-'}}
+    plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Number Of Cycles', 'grid': True, 'doDates': True,'figsize': (20,10),
+        'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 28, 'yLabelSize': 28, 'xMarginXtra': 2.0}
+    drawOutput = drawing.overlayChartsFromPandasDF(plt, myDataDF, xKey, chartOptionsDict, plotOptionsDict)
+    myPdf.savefig()
+    plt.close()
     
     myPdf.close()
 
 
 
-def getRunParameters(eventsInThisRun):
-    def getPerformance(insideTemps, outsideTemps, duration):
-        avgTempDiff = np.mean([outTemp - inTemp for inTemp, outTemp in zip(insideTemps, outsideTemps)])
-        if(duration > 0.0001):
-            performance = math.sqrt(max(0.01, avgTempDiff)) * (max(insideTemps) - min(insideTemps)) / duration
-        else:
-            performance = 0
-        return performance
+#def getRunParameters(eventsInThisRun):
+   #def getPerformance(insideTemps, outsideTemps, duration):
+        #avgTempDiff = np.mean([outTemp - inTemp for inTemp, outTemp in zip(insideTemps, outsideTemps)])
+        #if(duration > 0.0001):
+            #performance = math.sqrt(max(0.01, avgTempDiff)) * (max(insideTemps) - min(insideTemps)) / duration
+        #else:
+            #performance = 0
+        #return performance
     
-    runParameters = {}
-    runParameters['beginRunTime'] = eventsInThisRun[0]['timeStamp']
-    runParameters['endRunTime'] = eventsInThisRun[-1]['timeStamp']
-    runParameters['duration'] = (eventsInThisRun[-1]['timeStamp'] -
-                                 eventsInThisRun[0]['timeStamp']).total_seconds() / 60.
-    insideTemps = [event['avgInsideTemp'] for event in eventsInThisRun]
-    outsideTemps = [event['avgOutsideTemp'] for event in eventsInThisRun]
-    runParameters['performance'] = getPerformance(insideTemps, outsideTemps, runParameters['duration'])
-    return runParameters
+    #runParameters = {}
+    #runParameters['beginRunTime'] = eventsInThisRun[0]['timeStamp']
+    #runParameters['endRunTime'] = eventsInThisRun[-1]['timeStamp']
+    #runParameters['duration'] = (eventsInThisRun[-1]['timeStamp'] -
+    #                             eventsInThisRun[0]['timeStamp']).total_seconds() / 60.
+    #insideTemps = [event['avgInsideTemp'] for event in eventsInThisRun]
+    #outsideTemps = [event['avgOutsideTemp'] for event in eventsInThisRun]
+    #runParameters['performance'] = getPerformance(insideTemps, outsideTemps, runParameters['duration'])
+    #return runParameters
 
 
 
@@ -192,20 +228,31 @@ def getRunParameters(eventsInThisRun):
 
 
 #def checkForAlert(myDataDF, runPeriodDF):
-def checkForAlert(myDataDF, runParameters):
+def checkForAlert(myDataDF):
     print 'checkforAlert'
-    myEmail = 'pelin.kurt.4d@gmail.com'
-    myPassword='xxxxxx'
+    #myEmail = 'pelin.kurt.4d@gmail.com'
+    myEmail = 'pelin@salusinc.com'
+    #myPassword='PgFg18december'
+    myPassword='PgFgAg18december'
+    numCyclesArr = myDataDF['numCycles'].values
+    performanceArr = myDataDF['avgPerformance'].values
     #eMailAddresses=['pelin.kurt.4d@gmail.com', 'mwchaney@gmail.com', 'scott@salusinc.com']
-    eMailAddresses=['pelin.kurt.4d@gmail.com']
-    
-    #avgPerformance = np.mean(runPeriodDF['performance'])
-    avgPerformance = np.mean(runParameters['performance'])
-    print 'avgPerformance :', avgPerformance
-    if avgPerformance < 30.:
-        msgText = 'Performance alert. Average performance is '+str(avgPerformance)
-        msgSubject = 'Alarm testing!!!'
-        #makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses)
+    #eMailAddresses=['pelin.kurt.4d@gmail.com']
+    eMailAddresses=['pelin@salusinc.com']
+
+    meanPerformance = np.mean(performanceArr)
+    meanCycles = np.mean(numCyclesArr)
+
+    if meanPerformance < 30.:
+            msgText = 'Performance alert. Average performance is '+str(meanPerformance)
+            msgSubject = 'Alarm testing!!!'
+            makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses)
+
+    if meanCycles < 10.:
+        msgText = 'Cycle alert. Average alert is '+str(meanCycles)
+        msgSubject = 'Cycle alarm testing!!!'
+        makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses)
+
 
 
 def makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses):
@@ -224,3 +271,23 @@ def makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses):
 
 if __name__ == "__main__":
     main(sys.argv)
+
+
+    ### HVAC FAULT DETECTION ###
+
+    #Baseline data to be presented to the consumer with HFD:
+        #   Date of first detected fault
+        #   Frequency within a single dat of fault
+        #   Number of consecutive days with a fault
+        #   What system is having the issue
+
+    #How to consider if a system is having an issue:
+        #   Aggregated for date time and night time for the past month AND the past week 
+        #   Average Outdoor temperature
+        #   Average indoor temperature
+        #   Customer interactions with the thermostat
+        #   Of the total run time, what % did not reach the desired set point prior to a scheduled set point change
+        #   At the average outdoor and indoor temperature delta, what is the average run time required to change the interior temp by 3 degrees F
+        #   What is the average number of times the system cycled in a given hour
+
+

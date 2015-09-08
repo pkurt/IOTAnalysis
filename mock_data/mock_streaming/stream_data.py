@@ -64,7 +64,7 @@ def get_running_mode(prev_running_mode, setpoint, temp_in, ac_span):
 
 def write_output(hvac_id, simulated_current_time, temp_out, temp_in, setpoint, running_mode, file_name):
     out_file = open(file_name, 'a')
-    data_line = '{"id":'+str(hvac_id)+', "timeStamp":"'+str(simulated_current_time)
+    data_line = '{"id":'+str(hvac_id)+', "dataType": "all"'+', "timeStamp":"'+str(simulated_current_time)
     data_line += '", "OutsideTemp": '+str(temp_out)
     data_line += ', "InsideTemp": '+str(temp_in)
     data_line += ', "SetPoint": '+str(setpoint)
@@ -86,7 +86,7 @@ def main(argv):
     assert inArgs.deviceType in deviceTypes
 
 
-    hvac_id=20
+    hvac_id=30
     temp_in=78.00
     setpoint=78.00
     running_mode=1
