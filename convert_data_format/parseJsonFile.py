@@ -46,7 +46,10 @@ class parseJsonFile():
                         break
                     except ValueError:
                         # Not yet a complete JSON value
-                        line += next(f)
+                        try:
+                            line += next(f)
+                        except Exception as ex:
+                            pass
     
                 dataToSave = self.convertData(myjson)
                 print 'found some data to save: ', dataToSave
@@ -99,5 +102,9 @@ class parseJsonFile():
         Otherwise append to output file
         Finally, clear self.dataBuffer '''
 
-        pass
+        print 'Now build pandas data frame'
+        outDF = pd.DataFrame(self.dataBuffer)
+        print 'outDF is ', outDF
+        outDF.to_csv(self.outputFileName, index=False)
+
 
