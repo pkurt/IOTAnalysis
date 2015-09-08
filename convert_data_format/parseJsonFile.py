@@ -14,12 +14,14 @@ import datetime
 
 class parseJsonFile():
     def __init__(self, outputFileName, inputFileName,
-            variableNamesToSave, bufferSizeLimit):
+            alwaysSaveVars, sometimesSaveVars, bufferSizeLimit):
         ### Put member variables here:
-        self.jsonBuffer = []
+        #self.jsonBuffer = []
+        self.dataBuffer = []
         self.outputFileName = outputFileName
         self.inputFileName = inputFileName
-        self.variableNamesToSave = variableNamesToSave
+        self.alwaysSaveVars = alwaysSaveVars
+        self.sometimesSaveVars = sometimesSaveVars
         self.bufferSizeLimit = bufferSizeLimit
 
     def streamFromFile(self):
@@ -46,19 +48,56 @@ class parseJsonFile():
                         # Not yet a complete JSON value
                         line += next(f)
     
-                # do something with jfile
+                dataToSave = self.convertData(myjson)
+                print 'found some data to save: ', dataToSave
                 # append jsons to self.jsonBuffer
-                self.jsonBuffer.append(myjson)
-        print 'done with json file, final buffer is : ', self.jsonBuffer
+                self.dataBuffer.append(dataToSave)
+        print 'done with json file, final data to save buffer is : ', self.dataBuffer
 
+    def convertData(self, myjson):
+        ''' From full input json, extract data we care about,
+        defined by alwaysSaveVars and sometimesSaveVars '''
+        
+        dataToSave = {}
+        ### First extract alwaysSaveVars
+        for varDef in self.alwaysSaveVars:
+            ### varDef is a path to the variable inside the json
+            searchLocation = myjson
+            for step in varDef['input']:
+                try:
+                    searchLocation = searchLocation[step]
+                except:
+                    print 'Error, could not take step ', step,\
+                        ' inside of json for variable ', varDef,\
+                        ', and json ', myjson
+                    searchLocation = None
+                    break
+            print 'Tried to find data for varDef: ', varDef
+            print 'Result is ', searchLocation
+            ### Now save variable result
+            dataToSave[varDef['output']] = searchLocation
+
+        ### Now extract sometimesSaveVars
+        for varDef in self.sometimesSaveVars:
+            valToSave = None
+            try:
+                if myjson['metadata']['display_name'] == varDef['input']:
+                    valToSave = myjson['datapoint']['value']
+            except:
+                print 'Error trying to find variable defined by ', varDef, ', in myjson'
+                valToSave = None
+            dataToSave[varDef['output']] = valToSave
+
+        ### Have extracted all data we care about. Now return.
+        return dataToSave
 
     
     def saveOutput(self):
-        ''' From json buffer create output dataframe
+        ''' From data buffer create output dataframe
         Save outputDF to self.outputFileName
         Create output file if it does not already exist
         Otherwise append to output file
-        Finally, clear self.jsonBuffer '''
+        Finally, clear self.dataBuffer '''
 
         pass
 
