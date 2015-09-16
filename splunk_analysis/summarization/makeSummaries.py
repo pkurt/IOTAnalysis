@@ -10,6 +10,7 @@ import time
 import io
 import json
 import datetime
+import pandas as pd
 
 def convertDateTimeStringToDate(dt):
     myDatetime = datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%S")
@@ -36,7 +37,7 @@ def main (argv):
     summaryType = argv[4]
     print 'thermostatId = ', thermostatId, ', startTime = ', startTime, ', endTime = ', endTime
 
-    summaryDefinitions = {'daily': {'span': '1d'}, 'hourly': {'span': '1h'}, 'weekly': {'span': '1w'}}
+    summaryDefinitions = {'daily': {'span': '1d'}, 'hourly': {'span': '1h'}, 'weekly': {'span': '1w'}, 'monthly': {'span': '1mon'} }
     assert summaryType in summaryDefinitions
     span = summaryDefinitions[summaryType]['span']
 
@@ -57,16 +58,37 @@ def main (argv):
     searchReader = doSplunkSummarizationSearch(thermostatId, startTime, endTime, span, summariesToDo)
     print 'searchReader is '
     print searchReader
-    outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'.json'
-    dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName)
+    #outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'.json'
+    outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'.csv'
+    
+    #dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName)
+    myDataDF = getPandasDF(searchReader)
+    myDataDF['id'] = [thermostatId]*len(myDataDF.index)
+    pd.set_option('precision',3)
+    myDataDF.to_csv(outFileName, index=False, float_format='%.3f', columns=['id', 'timeStamp', 'avgDuration','avgInsideTemp',
+        'avgOutsideTemp','avgPerformance','avgRunningMode','avgSetPoint',
+        'maxInsideTemp','maxOutsideTemp','minInsideTemp','minOutsideTemp','numCycles'])
+
+def getPandasDF(searchReader):
+    myData = []
+    for line in searchReader:
+        myData.append(line)
+    myDataDF = pd.DataFrame(myData)
+    myDataDF['timeStamp'] = pd.to_datetime([fixBrokenTimeFormat(ele) for ele in myDataDF['_time']])
+    sys.stdout.flush()
+    myDataDF = myDataDF.sort('timeStamp')
+    sys.stdout.flush()
+    return myDataDF
 
 
 def dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName):
-    outFile = open(outFileName, 'w')
+    #outFile = open(outFileName, 'w')
+    print 'searchReader has type: ', type(searchReader)
     for line in searchReader:
         jsonString = '{"id": '+str(thermostatId)
-        #jsonString += ', "dataType": "dailyAggregatedSummary"'
-        jsonString += ', "dataType": "dailySummaryTest3"'
+        #jsonString += ', "dataType": "dailySummary"'
+        #jsonString += ', "dataType": "weeklySummary"'
+        jsonString += ', "dataType": "monthlySummary"'
         print 'line: ', line
         jsonString += ', "timeStamp": "'+ fixBrokenTimeFormat(line['_time'])+'", '
         for idx, summary in enumerate(summariesToDo):
@@ -79,8 +101,8 @@ def dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName):
                 jsonString += ', '
         jsonString += '},'
 
-        outFile.write(jsonString+'\n')
-    outFile.close()
+        #outFile.write(jsonString+'\n')
+   # outFile.close()
 
 
 #### Follow the example here: http://dev.splunk.com/view/python-sdk/SP-CAAAER5#reader
@@ -89,7 +111,7 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    service = client.connect(host='localhost', port=8089, username='admin', password='XXXXXXX')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,

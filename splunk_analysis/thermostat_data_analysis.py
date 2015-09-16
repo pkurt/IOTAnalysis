@@ -129,7 +129,7 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     #### Organize into pandas dataFrame, myDataDF
     print 'start of doSplunkSearch'
     sys.stdout.flush()
-    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxx')
     #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table _raw"
     jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table timeStamp InsideTemp OutsideTemp SetPoint RunningMode"
     #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time"

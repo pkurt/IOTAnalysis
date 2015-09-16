@@ -119,7 +119,7 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxxxx')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
@@ -232,8 +232,8 @@ def checkForAlert(myDataDF):
     print 'checkforAlert'
     #myEmail = 'pelin.kurt.4d@gmail.com'
     myEmail = 'pelin@salusinc.com'
-    #myPassword='PgFg18december'
-    myPassword='PgFgAg18december'
+    #myPassword='xxxxxxx'
+    myPassword='xxxxxxx'
     numCyclesArr = myDataDF['numCycles'].values
     performanceArr = myDataDF['avgPerformance'].values
     #eMailAddresses=['pelin.kurt.4d@gmail.com', 'mwchaney@gmail.com', 'scott@salusinc.com']
