@@ -19,6 +19,17 @@ import json
 import io
 from email.mime.text import MIMEText
 import datetime
+import multiprocessing as mp
+import logging
+logger = mp.log_to_stderr(logging.INFO)
+
+def convertSafely(ele, desiredType):
+    if desiredType is None:
+        return ele
+    try:
+        return desiredType(ele)
+    except:
+        return np.nan
 
 
 # Add functions below!
@@ -37,8 +48,8 @@ def main (argv):
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
     myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
 
-    #print 'pandas data DF:'
-    #print myDataDF
+    print 'pandas data DF:'
+    print myDataDF
     sys.stdout.flush()
     print 'now getRunPeriodDF'
     sys.stdout.flush()
@@ -65,25 +76,35 @@ def getRunPeriodDF(myDataDF):
     previousMode = 0
     eventsInThisRun = []
     for thisIdx, thisEvent in myDataDF.iterrows():
-        isRunning = thisEvent['RunningMode']
-        if previousMode == 1 and isRunning == False:
+        try:
+            isRunning = int(thisEvent['RunningMode'])
+        except:
+            isRunning = 0
+
+        if previousMode == 1 and isRunning == 0:
+            print 'Append run period'
             runParameters = getRunParameters(eventsInThisRun)
             endRunTime = thisEvent['timeStamp']
             thisRunPeriod = {'beginRunTime': runParameters['beginRunTime'], 'endRunTime': runParameters['endRunTime'],
                     'duration': runParameters['duration'], 'performance': runParameters['performance']}
             listOfRunPeriods.append(thisRunPeriod)
+            print 'listOfRunPeriods is now: ', listOfRunPeriods
 
             ### Clear events from this run to look for new one:
             eventsInThisRun = []
-        if isRunning:
+        if isRunning==1:
             eventsInThisRun.append(thisEvent)
-        previousMode = thisEvent['RunningMode']
+        try:
+            previousMode = int(thisEvent['RunningMode'])
+        except:
+            previousMode = 0
        #def getPerformance(InsideTemp,OutsideTemp,Duration):
     
     #### Got all run periods, now build pandas dataframe
     print 'Define runPeriodDF from ', listOfRunPeriods
     runPeriodDF = pd.DataFrame(listOfRunPeriods)
     return runPeriodDF
+    logger.info('Returning None')
 
 
             
@@ -108,7 +129,24 @@ def getPandasDF(searchReader):
         #print 'thisInsideTemp is: ', thisDict['InsideTemp']
     print 'get pandas Dataframe'
     myDataDF = pd.DataFrame(myData)
-    #print 'got pandas dataframe: ', myDataDF
+    print 'myDataDF: ', myDataDF
+
+    #myDataDF[['RunningMode', 'id']].astype(int)
+    #myDataDF[['InsideTemp', 'OutsideTemp', 'Setpoint']].astype(float)
+    # to fill missing NAN values
+    myDataDF = myDataDF.fillna(method='pad')
+    expectedTypes = {'RunningMode': int,
+                     'id': int,
+                     'InsideTemp': float,
+                     'OutsideTemp': float,
+                     'SetPoint': float}
+    ### convert types:
+    for col in myDataDF.columns.values:
+        desiredType = expectedTypes.get(col, None)
+        myDataDF[col] = [convertSafely(ele, desiredType) for ele in myDataDF[col].values]
+
+    print 'got pandas dataframe: ', myDataDF
+    #print 'got pandas dataframe: ', myDataDF.fillna(method='pad')
     myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
    # print 'sort data in getPandasDF'
     sys.stdout.flush()
@@ -129,19 +167,15 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     #### Organize into pandas dataFrame, myDataDF
     print 'start of doSplunkSearch'
     sys.stdout.flush()
-    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxx')
+    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
     #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table _raw"
-    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table timeStamp InsideTemp OutsideTemp SetPoint RunningMode"
+    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table id timeStamp InsideTemp OutsideTemp SetPoint RunningMode"
     #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time"
                      #table _time InsideTemp OutsideTemp SetPoint RunningMode
     job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
                                                   "earliest_time": StartTime,
                                                   "latest_time": EndTime,
                                                   "maxEvents": 5000000})
-#    job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
-#                                                  "earliest_time": StartTime,
-#                                                  "latest_time": EndTime,
-#                                                  "maxEvents": 5000000})
     print 'created job'
     sys.stdout.flush()
     resultCount = int(job["resultCount"])
@@ -159,25 +193,19 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
 
         rs = job.results(**kwargs_paginate)
         reader = results.ResultsReader(io.BufferedReader(rs))
-        #reader = results.ResultsReader(rs)
-
-        #rs = job.results(count=count, offset=offset)
-        #reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(rs)))
-
-
 
         if offset == 0:   ### first time
-            #print 'Before getting original DF'
+            print 'Before getting original DF'
             sys.stdout.flush()
             resultingDF = getPandasDF(reader)
-            #print 'got original DF'
+            print 'got original DF'
             sys.stdout.flush()
         else:
-            #print 'Before adding DF, resultingDF: ', resultingDF
+            print 'Before adding DF, resultingDF: ', resultingDF
             sys.stdout.flush()
             resultingDF = resultingDF.append(getPandasDF(reader), ignore_index=True)
         offset += count
-        #print 'After adding DF, resultingDF: ', resultingDF
+        print 'After adding DF, resultingDF: ', resultingDF
         sys.stdout.flush()
     print 'Done with splunk search'
     sys.stdout.flush()
@@ -195,7 +223,7 @@ def dashboard_performance_plots(myDataDF, runPeriodDF):
     plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Temperature', 'grid': True, 'doDates': True, 'figsize': (15,10),
                       'xAxisFontSize': 25, 'yAxisFontSize': 25, 'xLabelSize': 28, 'yLabelSize': 28, 'xMarginXtra': 10.0,
                       'y_limit': [45,135]}
-    #print 'datetime values are: ', myDataDF[xKey]
+    print 'datetime values are: ', myDataDF[xKey]
     drawLegOutputs, drawLegLabels = drawing.overlayChartsFromPandasDF(plt, myDataDF, xKey, chartOptionsDict, plotOptionsDict)
     plt.legend(drawLegOutputs, drawLegLabels, prop={'size':28})
     #plt.show()

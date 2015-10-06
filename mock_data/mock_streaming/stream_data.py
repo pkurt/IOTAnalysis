@@ -62,7 +62,20 @@ def get_running_mode(prev_running_mode, setpoint, temp_in, ac_span):
     elif temp_in < setpoint - ac_span: return 0
     else: return prev_running_mode
 
-def write_output(hvac_id, simulated_current_time, temp_out, temp_in, setpoint, running_mode, file_name):
+def write_output_CSV(hvac_id, current_time, dataType, value, columnName, out_file, csvColumns):
+    outLine = str(hvac_id)+','+str(current_time)+','+ str(dataType)
+    optionalColumns = csvColumns[3:]
+    assert columnName in optionalColumns
+    for col in optionalColumns:
+        if columnName == col:
+            outLine += ','+str(value)
+        else:
+            outLine += ','
+    outLine += '\n'
+    out_file.write(outLine)
+
+
+def write_output_oldJSON(hvac_id, simulated_current_time, temp_out, temp_in, setpoint, running_mode, file_name):
     out_file = open(file_name, 'a')
     data_line = '{"id":'+str(hvac_id)+', "dataType": "all"'+', "timeStamp":"'+str(simulated_current_time)
     data_line += '", "OutsideTemp": '+str(temp_out)
@@ -74,11 +87,6 @@ def write_output(hvac_id, simulated_current_time, temp_out, temp_in, setpoint, r
     out_file.close()
 
 def main(argv):
-    #assert len(argv) == 4
-    #startTime=datetime.datetime.strptime(argv[0], '%Y-%m-%d')
-    #endTime=datetime.datetime.strptime(argv[1], '%Y-%m-%d')
-    #timeStepSeconds = int(argv[2])
-    #outFileName = argv[3]
 
     deviceTypes = {'Thermostat'}
     inArgs = parser.parse_args()
@@ -86,7 +94,8 @@ def main(argv):
     assert inArgs.deviceType in deviceTypes
 
 
-    hvac_id=30
+    hvac_id=56
+    dataType="fullSim"
     temp_in=78.00
     setpoint=78.00
     running_mode=1
@@ -103,7 +112,19 @@ def main(argv):
     ac_span = 0.5
     avgBaselineTemp = 65
 
+    previous_temp_in_write = 0   ### initial value
+    previous_temp_out_write_time = datetime.datetime(1980, 1, 1, 0, 0, 0)  #### initial value
+    previous_setpoint_write_time = datetime.datetime(1980, 1, 1, 0, 0, 0)  #### initial value
+    previous_running_mode_write = 0   ### initial value
     #print 'start at real time: ', real_start_time, ', simulated time: ', simulated_start_time
+
+    ### initialize header for output .csv file:
+    csvColumns = ['hvac_id', 'current_time', 'dataType', 'temp_out', 'temp_in', 'setpoint', 'running_mode']
+    headerLine = ','.join(csvColumns)
+    out_file = open(inArgs.outFileName, 'w')
+    out_file.write(headerLine+'\n')
+    #out_file.close()
+
     while simulated_current_time < inArgs.endTime:
         simulated_current_time += datetime.timedelta(seconds=inArgs.timeStepSeconds)
         delta_simulated_time = simulated_current_time - prev_simulated_time
@@ -124,9 +145,30 @@ def main(argv):
                 simulated_current_day, ', hour: ', simulated_current_hour,\
                 ', minute: ', simulated_current_minute, ', temp_out: ', temp_out
 
-        write_output(hvac_id, simulated_current_time, temp_out, temp_in, setpoint, running_mode, inArgs.outFileName)
+
+        write_temp_out = True if simulated_current_time >= previous_temp_out_write_time + datetime.timedelta(minutes=5) else False
+        write_temp_in = True if abs(temp_in - previous_temp_in_write) > 0.1 else False
+        write_setpoint = True if simulated_current_time >= previous_setpoint_write_time + datetime.timedelta(days=1) else False
+        write_running_mode = True if running_mode != previous_running_mode_write else False
+        if write_temp_out:
+            previous_temp_out_write_time = simulated_current_time
+            write_output_CSV(hvac_id, simulated_current_time,dataType=dataType, value=temp_out,
+                    columnName='temp_out', out_file=out_file, csvColumns=csvColumns)
+        if write_temp_in:
+            previous_temp_in_write = temp_in
+            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=temp_in,
+                    columnName='temp_in', out_file=out_file, csvColumns=csvColumns)
+        if write_setpoint:
+            previous_setpoint_write_time = simulated_current_time
+            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=setpoint,
+                    columnName='setpoint', out_file=out_file, csvColumns=csvColumns)
+        if write_running_mode:
+            previous_running_mode_write = running_mode
+            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=running_mode,
+                    columnName='running_mode', out_file=out_file, csvColumns=csvColumns)
         prev_simulated_time=simulated_current_time
         #time.sleep(5)
+    out_file.close()
 
 
 
