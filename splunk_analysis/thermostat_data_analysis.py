@@ -55,10 +55,7 @@ def main (argv):
 
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
     myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
-    sizeOfDF = len(myDataDF.index)
-    myDataDF['id'] = str(thermostatId)*sizeOfDF
-    myDataDF['OutDataType'] = str(OutDataType)*sizeOfDF
-    
+
 
     
     print 'pandas data DF:'
@@ -86,6 +83,9 @@ def main (argv):
 ### initialize header for output .csv file:
     outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.csv'
     csvColumns = ['id', 'beginRunTime', 'endRunTime','OutDataType', 'performance', 'duration']
+    sizeOfDF = len(runPeriodDF.index)
+    runPeriodDF['id'] = [thermostatId]*sizeOfDF
+    runPeriodDF['OutDataType'] = [OutDataType]*sizeOfDF
     runPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
 
 
