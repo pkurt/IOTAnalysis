@@ -1,0 +1,23 @@
+*.pyc
+*.swp
+*.idea
+*.DS_Store*
+*coverage_html_report*
+.coverage
+.coverage.*
+.python-version
+__stdout__
+docs/_build
+build/
+proxypid
+proxy.log
+MANIFEST
+coverage_report
+test.log
+examples/*/local
+examples/*/metadata
+tests/searchcommands_data/log/
+tests/searchcommands_data/output/
+examples/searchcommands_app/searchcommand_app.log
+Test Results*.html
+tests/searchcommands/data/app/app.log

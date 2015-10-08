@@ -43,11 +43,24 @@ def main (argv):
     StartTime = argv[2]
     EndTime = argv[3]
     DataType = argv[4]
+    
+    OutDataType="runPeriod"
+    
+
+    #out_file_init = open(outFileNameCSV, 'w')
+    #out_file_init.write('')
+    #out_file_init.close()
+
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
 
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
     myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
+    sizeOfDF = len(myDataDF.index)
+    myDataDF['id'] = str(thermostatId)*sizeOfDF
+    myDataDF['OutDataType'] = str(OutDataType)*sizeOfDF
+    
 
+    
     print 'pandas data DF:'
     print myDataDF
     sys.stdout.flush()
@@ -63,11 +76,19 @@ def main (argv):
     print 'It took ', str(runtime), ' to run'
     sys.stdout.flush()
 
-### added new
+### added to get json output
     outFileName = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.json'
     columnsToSave = [{'var':'beginRunTime', 'type':str}, {'var':'endRunTime', 'type':str},
             {'var':'duration', 'type':float}, {'var':'performance', 'type':float}]
     dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName)
+
+
+### initialize header for output .csv file:
+    outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.csv'
+    csvColumns = ['id', 'beginRunTime', 'endRunTime','OutDataType', 'performance', 'duration']
+    runPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
+
+
 
 
 def getRunPeriodDF(myDataDF):
@@ -273,7 +294,8 @@ def getRunParameters(eventsInThisRun):
     
     
 
-### added new
+
+### write the output in JSON format
 def dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName):
     outFile = open(outFileName, 'w')
     for idx, row in runPeriodDF.iterrows():
@@ -287,6 +309,7 @@ def dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName):
         jsonString += '},\n'
         outFile.write(jsonString)
     outFile.close()
+
 
 
 
