@@ -45,18 +45,10 @@ def main (argv):
     DataType = argv[4]
     
     OutDataType="runPeriod"
-    
-
-    #out_file_init = open(outFileNameCSV, 'w')
-    #out_file_init.write('')
-    #out_file_init.close()
 
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
-
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
     myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
-
-
     
     print 'pandas data DF:'
     print myDataDF
@@ -82,10 +74,10 @@ def main (argv):
 
 ### initialize header for output .csv file:
     outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.csv'
-    csvColumns = ['id', 'beginRunTime', 'endRunTime','OutDataType', 'performance', 'duration']
+    csvColumns = ['id', 'beginRunTime', 'endRunTime','dataType', 'performance', 'duration']
     sizeOfDF = len(runPeriodDF.index)
     runPeriodDF['id'] = [thermostatId]*sizeOfDF
-    runPeriodDF['OutDataType'] = [OutDataType]*sizeOfDF
+    runPeriodDF['dataType'] = [OutDataType]*sizeOfDF
     runPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
 
 
@@ -148,9 +140,9 @@ def getPandasDF(searchReader):
         lineNum += 1
         #print 'this row is: ', thisDict
         #print 'thisInsideTemp is: ', thisDict['InsideTemp']
-    print 'get pandas Dataframe'
+    #print 'get pandas Dataframe'
     myDataDF = pd.DataFrame(myData)
-    print 'myDataDF: ', myDataDF
+    #print 'myDataDF: ', myDataDF
 
     #myDataDF[['RunningMode', 'id']].astype(int)
     #myDataDF[['InsideTemp', 'OutsideTemp', 'Setpoint']].astype(float)
@@ -166,7 +158,7 @@ def getPandasDF(searchReader):
         desiredType = expectedTypes.get(col, None)
         myDataDF[col] = [convertSafely(ele, desiredType) for ele in myDataDF[col].values]
 
-    print 'got pandas dataframe: ', myDataDF
+    #print 'got pandas dataframe: ', myDataDF
     #print 'got pandas dataframe: ', myDataDF.fillna(method='pad')
     myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
    # print 'sort data in getPandasDF'

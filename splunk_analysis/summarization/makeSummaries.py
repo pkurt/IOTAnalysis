@@ -59,13 +59,16 @@ def main (argv):
     print 'searchReader is '
     print searchReader
     #outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'.json'
-    outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'.csv'
+    outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'_id'+str(thermostatId)+'.csv'
     
     #dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName)
     myDataDF = getPandasDF(searchReader)
     myDataDF['id'] = [thermostatId]*len(myDataDF.index)
+    #myDataDF['dataType'] = "monthlySummary"
+    #myDataDF['dataType'] = "weeklySummary"
+    myDataDF['dataType'] = "dailySummary"
     pd.set_option('precision',3)
-    myDataDF.to_csv(outFileName, index=False, float_format='%.3f', columns=['id', 'timeStamp', 'avgDuration','avgInsideTemp',
+    myDataDF.to_csv(outFileName, index=False, float_format='%.3f', columns=['id', 'dataType', 'timeStamp', 'avgDuration','avgInsideTemp',
         'avgOutsideTemp','avgPerformance','avgRunningMode','avgSetPoint',
         'maxInsideTemp','maxOutsideTemp','minInsideTemp','minOutsideTemp','numCycles'])
 
@@ -86,9 +89,9 @@ def dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName):
     print 'searchReader has type: ', type(searchReader)
     for line in searchReader:
         jsonString = '{"id": '+str(thermostatId)
-        #jsonString += ', "dataType": "dailySummary"'
+        jsonString += ', "dataType": "dailySummary"'
         #jsonString += ', "dataType": "weeklySummary"'
-        jsonString += ', "dataType": "monthlySummary"'
+        #jsonString += ', "dataType": "monthlySummary"'
         print 'line: ', line
         jsonString += ', "timeStamp": "'+ fixBrokenTimeFormat(line['_time'])+'", '
         for idx, summary in enumerate(summariesToDo):
@@ -111,7 +114,7 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='XXXXXXX')
+    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
@@ -119,7 +122,7 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     statsStr = ''
     for summary in summariesToDo:
         statsStr += summary['function']+'('+summary['inVariable']+') as '+summary['outVariable']+' '
-    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=all OR dataType=runPeriods) | bucket _time span="+\
+    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | bucket _time span="+\
             span+" | stats " + statsStr + " by _time  | sort _time "
     print 'jobSearchString: ', jobSearchString
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
