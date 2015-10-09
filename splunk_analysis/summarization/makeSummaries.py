@@ -77,6 +77,8 @@ def getPandasDF(searchReader):
     for line in searchReader:
         myData.append(line)
     myDataDF = pd.DataFrame(myData)
+    # to fill missing NAN valuesc??????????????????????
+    #myDataDF = myDataDF.fillna(method='pad')
     myDataDF['timeStamp'] = pd.to_datetime([fixBrokenTimeFormat(ele) for ele in myDataDF['_time']])
     sys.stdout.flush()
     myDataDF = myDataDF.sort('timeStamp')
@@ -120,6 +122,18 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
                     "latest_time": EndTime,
                     "count": 0}
     statsStr = ''
+
+    #### Here's the trick to handle both (a) missing data and (b) variable spacing in time series:
+    ## Determine nSeconds, fill in here:
+    # id=56 AND (dataType=fullSim) | sort timeStamp | delta _time as deltaTime |
+    #### Then loop over variables like this:
+    # streamstats last(RunningMode) as lastRunningMode |
+    # eval timeWtRunningMode = deltaTime*lastRunningMode / (nSeconds) |
+    # streamstats last(InsideTemp) as lastInsideTemp |
+    # eval timeWtInsideTemp = deltaTime*lastInsideTemp / (nSeconds) | bucket _time span=1d |
+    # stats avg(lastRunningMode), avg(deltaTime), sum(timeWtRunningMode), avg(lastInsideTemp) by _time
+    ####
+
     for summary in summariesToDo:
         statsStr += summary['function']+'('+summary['inVariable']+') as '+summary['outVariable']+' '
     jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | bucket _time span="+\
