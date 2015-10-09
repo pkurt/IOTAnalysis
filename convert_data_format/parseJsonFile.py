@@ -92,7 +92,7 @@ class parseJsonFile():
         return dataToSave
 
     
-    def saveOutput(self):
+    def saveOutput(self, fillMissingValues=False):
         ''' From data buffer create output dataframe
         Save outputDF to self.outputFileName
         Create output file if it does not already exist
@@ -102,6 +102,9 @@ class parseJsonFile():
         print 'Now build pandas data frame'
         outDF = pd.DataFrame(self.dataBuffer)
         print 'outDF is ', outDF
+        if fillMissingValues:
+            outDF = outDF.fillna(method='pad')
+            print 'after filling missing values, outDF is ', outDF
         outDF.to_csv(self.outputFileName, index=False)
 
 
