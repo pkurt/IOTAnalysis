@@ -43,17 +43,17 @@ def main (argv):
 
     summariesToDo = \
        [
-         {'inVariable': 'InsideTemp', 'outVariable': 'maxInsideTemp', 'function': 'max'},
-         {'inVariable': 'InsideTemp', 'outVariable': 'avgInsideTemp', 'function': 'avg'},
-         {'inVariable': 'InsideTemp', 'outVariable': 'minInsideTemp', 'function': 'min'},
-         {'inVariable': 'OutsideTemp', 'outVariable': 'avgOutsideTemp', 'function': 'avg'},
-         {'inVariable': 'SetPoint', 'outVariable': 'avgSetPoint', 'function': 'avg'},
-         {'inVariable': 'RunningMode', 'outVariable': 'avgRunningMode', 'function': 'avg'},
-         {'inVariable': 'OutsideTemp', 'outVariable': 'maxOutsideTemp', 'function': 'max'},
-         {'inVariable': 'OutsideTemp', 'outVariable': 'minOutsideTemp', 'function': 'min'},
-         {'inVariable': 'performance', 'outVariable': 'avgPerformance', 'function': 'avg'},
-         {'inVariable': 'duration', 'outVariable': 'avgDuration', 'function': 'avg'},
-         {'inVariable': 'duration', 'outVariable': 'numCycles', 'function': 'count'}]
+         {'inVariable': 'InsideTemp', 'outVariable': 'maxInsideTemp', 'function': 'max', 'doTimeWeight': False},
+         {'inVariable': 'InsideTemp', 'outVariable': 'avgInsideTemp', 'function': 'avg', 'doTimeWeight': True},
+         {'inVariable': 'InsideTemp', 'outVariable': 'minInsideTemp', 'function': 'min', 'doTimeWeight': False},
+         {'inVariable': 'OutsideTemp', 'outVariable': 'avgOutsideTemp', 'function': 'avg', 'doTimeWeight': True},
+         {'inVariable': 'SetPoint', 'outVariable': 'avgSetPoint', 'function': 'avg', 'doTimeWeight': True},
+         {'inVariable': 'RunningMode', 'outVariable': 'avgRunningMode', 'function': 'avg', 'doTimeWeight': True},
+         {'inVariable': 'OutsideTemp', 'outVariable': 'maxOutsideTemp', 'function': 'max', 'doTimeWeight': False},
+         {'inVariable': 'OutsideTemp', 'outVariable': 'minOutsideTemp', 'function': 'min', 'doTimeWeight': False},
+         {'inVariable': 'performance', 'outVariable': 'avgPerformance', 'function': 'avg', 'doTimeWeight': False},
+         {'inVariable': 'duration', 'outVariable': 'avgDuration', 'function': 'avg', 'doTimeWeight': False},
+         {'inVariable': 'duration', 'outVariable': 'numCycles', 'function': 'count', 'doTimeWeight': False}]
 
     searchReader = doSplunkSummarizationSearch(thermostatId, startTime, endTime, span, summariesToDo)
     print 'searchReader is '
@@ -122,6 +122,11 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
                     "latest_time": EndTime,
                     "count": 0}
     statsStr = ''
+    timeWeightStr = ''
+    if span == '1h': nSeconds = 60.*60.
+    if span == '1d': nSeconds = 24.*60.*60.
+    if span == '1w': nSeconds = 7.*24.*60.*60.
+    postStr = ''
 
     #### Here's the trick to handle both (a) missing data and (b) variable spacing in time series:
     ## Determine nSeconds, fill in here:
@@ -133,11 +138,27 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     # eval timeWtInsideTemp = deltaTime*lastInsideTemp / (nSeconds) | bucket _time span=1d |
     # stats avg(lastRunningMode), avg(deltaTime), sum(timeWtRunningMode), avg(lastInsideTemp) by _time
     ####
-
+#'doTimeWeight'
     for summary in summariesToDo:
-        statsStr += summary['function']+'('+summary['inVariable']+') as '+summary['outVariable']+' '
-    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | bucket _time span="+\
-            span+" | stats " + statsStr + " by _time  | sort _time "
+        if summary['doTimeWeight']:
+            timeWeightStr += 'streamstats last('+summary['inVariable']+') as last'+summary['inVariable']+' | '
+            timeWeightStr += 'eval timeWt'+summary['inVariable']+' = deltaTime*last'\
+                    +summary['inVariable']+ ' | '
+            #### Just add the "timeWt" in front of inVariable this case
+            if summary['function'] == 'avg':
+                statsStr += 'sum(timeWt'+summary['inVariable']+') as sum'+summary['inVariable']+' '
+                postStr += ' | eval '+summary['outVariable']+' =  sum'+summary['inVariable']+' / sumDeltaTime'
+            else:
+                print 'Error, have not implemented time-weighted averages for function '+summary['function']
+                assert 0
+        else:
+            statsStr += summary['function']+'('+summary['inVariable']+') as '+summary['outVariable']+' '
+    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | sort _time | "+\
+            " delta _time as deltaTime | " + timeWeightStr + " bucket _time span="+\
+            span+" | stats sum(deltaTime) as sumDeltaTime " + statsStr + " by _time"+postStr
+    
+    #jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | bucket _time span="+\
+    #        span+" | stats " + statsStr + " by _time  | sort _time "
     print 'jobSearchString: ', jobSearchString
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
     reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
