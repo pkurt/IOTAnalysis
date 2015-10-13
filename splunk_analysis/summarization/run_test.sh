@@ -5,4 +5,5 @@ export PYTHONPATH=/Users/pelinkurtgarberson/Desktop/sdk_python/splunk-sdk-python
 #python makeSummaries.py 30 '2014-01-01T00:00:00' '2015-01-01T00:00:00' weekly
 #python makeSummaries.py 30 '2014-01-01T00:00:00' '2015-01-01T00:00:00' monthly
 
-python makeSummaries.py 56 '2014-01-01T00:00:00' '2015-01-01T00:00:00' daily
+#python makeSummaries.py 56 '2014-07-29T00:00:00' '2014-08-06T00:00:00' daily
+python makeSummaries.py 56 '2014-01-01T00:00:00' '2015-01-01T00:00:00' dailyAgg

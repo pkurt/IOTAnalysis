@@ -37,7 +37,7 @@ def main (argv):
     summaryType = argv[4]
     print 'thermostatId = ', thermostatId, ', startTime = ', startTime, ', endTime = ', endTime
 
-    summaryDefinitions = {'daily': {'span': '1d'}, 'hourly': {'span': '1h'}, 'weekly': {'span': '1w'}, 'monthly': {'span': '1mon'} }
+    summaryDefinitions = {'dailyAgg': {'span': '1d'}, 'hourlyAgg': {'span': '1h'}, 'weeklyAgg': {'span': '1w'}, 'monthlyAgg': {'span': '1mon'} }
     assert summaryType in summaryDefinitions
     span = summaryDefinitions[summaryType]['span']
 
@@ -62,23 +62,31 @@ def main (argv):
     outFileName = 'output/summary_'+summaryType+startTimeString+'_To_'+endTimeString+'_id'+str(thermostatId)+'.csv'
     
     #dumpSearchResults(searchReader, thermostatId, summariesToDo, outFileName)
-    myDataDF = getPandasDF(searchReader)
+    irregTimeSeriesToSelect = ['avgInsideTemp', 'avgOutsideTemp', 'avgSetPoint', 'maxInsideTemp', 'maxOutsideTemp',
+            'minInsideTemp','minOutsideTemp']
+    runIntervalColsToSelect = ['avgDuration', 'avgPerformance', 'avgRunningMode', 'numCycles']
+    bothColsToSelect = ['id', 'dataType', 'timeStamp']
+
+
+    myDataDF = getPandasDF(searchReader, fillColsNAFor=irregTimeSeriesToSelect)
     myDataDF['id'] = [thermostatId]*len(myDataDF.index)
     #myDataDF['dataType'] = "monthlySummary"
     #myDataDF['dataType'] = "weeklySummary"
-    myDataDF['dataType'] = "dailySummary"
+    myDataDF['dataType'] = "dailyAggSummaryNew"
     pd.set_option('precision',3)
-    myDataDF.to_csv(outFileName, index=False, float_format='%.3f', columns=['id', 'dataType', 'timeStamp', 'avgDuration','avgInsideTemp',
-        'avgOutsideTemp','avgPerformance','avgRunningMode','avgSetPoint',
-        'maxInsideTemp','maxOutsideTemp','minInsideTemp','minOutsideTemp','numCycles'])
 
-def getPandasDF(searchReader):
+    allColsToSelect = bothColsToSelect + irregTimeSeriesToSelect + runIntervalColsToSelect
+    myDataDF.to_csv(outFileName, index=False, float_format='%.3f', columns=allColsToSelect)
+
+def getPandasDF(searchReader, fillColsNAFor):
     myData = []
     for line in searchReader:
         myData.append(line)
     myDataDF = pd.DataFrame(myData)
-    # to fill missing NAN valuesc??????????????????????
+    # to fill missing NAN values### but it is not OK to do this for runPeriod intervals....
+ #   df[['A', 'B', 'C', 'D']] = df[['A', 'B', 'C', 'D']].fillna(axis=1, method='backfill')
     #myDataDF = myDataDF.fillna(method='pad')
+    myDataDF[fillColsNAFor] = myDataDF[fillColsNAFor].fillna(method='pad')
     myDataDF['timeStamp'] = pd.to_datetime([fixBrokenTimeFormat(ele) for ele in myDataDF['_time']])
     sys.stdout.flush()
     myDataDF = myDataDF.sort('timeStamp')
@@ -121,6 +129,9 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
                     "count": 0}
+    
+    
+    
     statsStr = ''
     timeWeightStr = ''
     if span == '1h': nSeconds = 60.*60.
@@ -153,7 +164,7 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
                 assert 0
         else:
             statsStr += summary['function']+'('+summary['inVariable']+') as '+summary['outVariable']+' '
-    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriod) | sort _time | "+\
+    jobSearchString= "search id="+str(thermostatId)+" AND (dataType=fullSim OR dataType=runPeriodCSV) | sort 0 _time | "+\
             " delta _time as deltaTime | " + timeWeightStr + " bucket _time span="+\
             span+" | stats sum(deltaTime) as sumDeltaTime " + statsStr + " by _time"+postStr
     
@@ -162,8 +173,9 @@ def doSplunkSummarizationSearch(thermostatId, StartTime, EndTime, span, summarie
     print 'jobSearchString: ', jobSearchString
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
     reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
-    #reader = results.ResultsReader(job_results)
     return reader
+
+
 
 
 if __name__ == "__main__":

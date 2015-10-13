@@ -17,6 +17,7 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 import time
 import json
+import csv
 import io
 from email.mime.text import MIMEText
 import collections
@@ -50,7 +51,7 @@ def main (argv):
     #print 'runPeriodDF is ', runPeriodDF
     dashboard_performance_plots(myDataDF)
     #checkForAlert(myDataDF, runPeriodDF)
-    checkForAlert(myDataDF)
+   # checkForAlert(myDataDF)
 
     
     #print 'runPeriodDF: ', runPeriodDF
@@ -89,27 +90,24 @@ def getPandasDF(searchReader):
 
 
     lineNum = 0
-    #print 'searchReader has type: ', type(searchReader)
+    print 'searchReader has type: ', type(searchReader)
     for line in searchReader:
         #print 'line: ', line
-        #thisDict = json.loads(line['_raw'])
-        #myData.append(thisDict)
+        print ', '.join(line)
         myData.append(line)
         lineNum += 1
         #print 'this row is: ', thisDict
         #print 'thisInsideTemp is: ', thisDict['InsideTemp']
     myDataDF = pd.DataFrame(myData)
+   
     varsToBeFloats = ['maxInsideTemp', 'avgInsideTemp', 'minInsideTemp', 'maxOutsideTemp',
             'avgOutsideTemp', 'minOutsideTemp', 'avgSetPoint', 'avgRunningMode', 'avgPerformance', 'avgDuration', 'numCycles']
     myDataDF[varsToBeFloats] = myDataDF[varsToBeFloats].astype(float)
     myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
-   # print 'sort data in getPandasDF'
+    print 'sort data in getPandasDF'
     sys.stdout.flush()
     myDataDF = myDataDF.sort('timeStamp')
-    #print 'Full pandas data = ', myDataDF
-    #print 'Data where it is running = ', myDataDF[myDataDF['RunningMode'] == 1]
-    #print 'Data where outsidetemp > 78 degrees = ', myDataDF[myDataDF['OutsideTemp'] > 78.]
-  #  print 'Return myDataDF'
+    print 'Full pandas data = ', myDataDF
     sys.stdout.flush()
     return myDataDF
 
@@ -119,13 +117,16 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxxxx')
+    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december', sourcetype='csv')
     #print 'got service, now make job'
     kwargs_oneshot={"earliest_time": StartTime,
                     "latest_time": EndTime,
                     "count": 0}
-    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort _time |"+\
+
+    jobSearchString= "search id="+str(thermostatId) + " dataType="+str(DataType)+" | sort _time |"+\
                       " table timeStamp maxInsideTemp avgInsideTemp minInsideTemp maxOutsideTemp avgOutsideTemp minOutsideTemp avgSetPoint avgRunningMode avgPerformance avgDuration numCycles"
+    #    jobSearchString= "search id="+str(thermostatId)+ "sourcetype="+str(csv) + " dataType="+str(DataType)+" | sort _time |"+\
+    #                  " table timeStamp maxInsideTemp avgInsideTemp minInsideTemp maxOutsideTemp avgOutsideTemp minOutsideTemp avgSetPoint avgRunningMode avgPerformance avgDuration numCycles"
     job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
    # print 'jobSearchName: ', jobSearchString
     reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
@@ -136,7 +137,7 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
 def dashboard_performance_plots(myDataDF):
     #print 'Now make plots for ', myDataDF
     xKey='timeStamp'
-    myPdf = PdfPages('AggregatedResultsFromId30.pdf')
+    myPdf = PdfPages('AggregatedResultsFromId56.pdf')
     
     # draw avgTemperatures
     chartOptionsDict = collections.OrderedDict([

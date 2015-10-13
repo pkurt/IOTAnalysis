@@ -44,7 +44,7 @@ def main (argv):
     EndTime = argv[3]
     DataType = argv[4]
     
-    OutDataType="runPeriod"
+    OutDataType="runPeriodCSV"
 
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
