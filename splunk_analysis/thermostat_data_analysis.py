@@ -94,40 +94,58 @@ def main (argv):
 
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
-    myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
-    myDataDF = cleanData(myDataDF)
+    allTIDsDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
+    #### Now clean any weird formats from data
+    allTIDsDataDF = cleanData(allTIDsDataDF)
+    allTIDsDataDF['timeStamp'] = pd.to_datetime(allTIDsDataDF['timeStamp'], format='%Y-%m-%d %H:%M:%S')
 
-    myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'], format='%Y-%m-%d %H:%M:%S')
-    
-    print 'pandas data DF:'
-    print myDataDF
-    sys.stdout.flush()
-    print 'now getRunPeriodDF'
-    sys.stdout.flush()
-    runPeriodDF = getRunPeriodDF(myDataDF)
-    if len(runPeriodDF.index)> 0:
-        dashboard_performance_plots(myDataDF, runPeriodDF)
-        checkForAlert(myDataDF, runPeriodDF)
-        #print 'runPeriodDF: ', runPeriodDF
+    #### Now split into individual thermostats and do analysis:
+    myIDs = np.unique(allTIDsDataDF['id'].values)
+    for myID in myIDs:
+        print 'Do analysis for thermostat ', myID
+        #### Get dataframe for this ID:
+        thisTIDDF = allTIDsDataDF[allTIDsDataDF['id'] == myID]
+        print 'Number of events is ', len(thisTIDDF.index)
+        print 'now getRunPeriodDF'
         sys.stdout.flush()
+
+
+        #### Append run period objects to inclusive data frame
+        thisTIDRunPeriodDF = getRunPeriodDF(thisTIDDF)
+        if myID == myIDs[0]:
+            #### If first time, create DF for run periods
+            totRunPeriodDF = cp.deepcopy(thisTIDRunPeriodDF)
+        else:
+            #### If not first time, append DF for run periods
+            totRunPeriodDF = totRunPeriodDF.append(thisTIDRunPeriodDF, ignore_index=True)
+
+        #### Make plots for this thermostat
+        if len(thisTIDDF.index)> 0:
+            dashboard_performance_plots(thisTIDDF, thisTIDRunPeriodDF, myID)
+            checkForAlert(thisTIDDF, thisTIDRunPeriodDF, myID)
+            #print 'thisTIDRunPeriodDF: ', thisTIDRunPeriodDF
+            sys.stdout.flush()
+
     runtime = time.time() - start_time
     print 'It took ', str(runtime), ' to run'
     sys.stdout.flush()
 
+    print 'Done with analysis'
+    print 'Now save out runperiod results'
 ### added to get json output
-    outFileName = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.json'
+    outFileName = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'.json'
     columnsToSave = [{'var':'beginRunTime', 'type':str}, {'var':'endRunTime', 'type':str},
             {'var':'duration', 'type':float}, {'var':'performance', 'type':float}]
-    dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName)
+    dumpRunPeriodResults(totRunPeriodDF, thermostatId, columnsToSave, outFileName)
 
 
 ### initialize header for output .csv file:
-    outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'_id'+str(thermostatId)+'.csv'
+    outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'.csv'
     csvColumns = ['id', 'beginRunTime', 'endRunTime','dataType', 'performance', 'duration']
-    sizeOfDF = len(runPeriodDF.index)
-    runPeriodDF['id'] = [thermostatId]*sizeOfDF
-    runPeriodDF['dataType'] = [OutDataType]*sizeOfDF
-    runPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
+    sizeOfDF = len(totRunPeriodDF.index)
+    totRunPeriodDF['id'] = [thermostatId]*sizeOfDF
+    totRunPeriodDF['dataType'] = [OutDataType]*sizeOfDF
+    totRunPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
 
 
 
@@ -275,10 +293,10 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     return resultingDF
 
 
-def dashboard_performance_plots(myDataDF, runPeriodDF):
+def dashboard_performance_plots(myDataDF, runPeriodDF, myID):
     print 'Now make plots for ', myDataDF
     xKey='timeStamp'
-    myPdf = PdfPages('testPdf.pdf')
+    myPdf = PdfPages('images/plots_for_ID' + str(myID) + '.pdf')
     chartOptionsDict = {'InsideTemp': {'color': 'mediumturquoise', 'style': '-', 'desc': 'Inside Temp', 'linewidth':2},
                         'OutsideTemp': {'color': 'mediumvioletred', 'style': '-', 'desc': 'Outside Temp', 'linewidth':2},
                         'SetPoint': {'color': 'blue', 'style': '-', 'desc': 'Setpoint', 'linewidth':2}
@@ -363,7 +381,7 @@ def dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName):
 
 
 #def checkForAlert(myDataDF, runPeriodDF):
-def checkForAlert(myDataDF, runParameters):
+def checkForAlert(myDataDF, runParameters, myID):
     print 'checkforAlert'
     myEmail = 'pelin.kurt.4d@gmail.com'
     myPassword='xxxxxx'
@@ -374,7 +392,7 @@ def checkForAlert(myDataDF, runParameters):
     avgPerformance = np.mean(runParameters['performance'])
     print 'avgPerformance :', avgPerformance
     if avgPerformance < 30.:
-        msgText = 'Performance alert. Average performance is '+str(avgPerformance)
+        msgText = 'Performance alert. Average performance for ID '+str(myID)+ ' is '+str(avgPerformance)
         msgSubject = 'Alarm testing!!!'
         #makeAlert(msgText, msgSubject, myEmail, myPassword, eMailAddresses)
 
