@@ -1,9 +1,9 @@
-import numpy as np
 import sys
 import os
 import math
 import ast
 import pandas as pd
+import numpy as np
 import splunklib.client as client
 import splunklib.results as results
 import matplotlib.pyplot as plt
@@ -22,6 +22,52 @@ import datetime
 import multiprocessing as mp
 import logging
 logger = mp.log_to_stderr(logging.INFO)
+
+def cleanData(myDataDF):
+    ''' Write in any cleaning requirements '''
+    def strHasDTFormat(myStr):
+        print 'str: ', myStr, ', type: ', type(myStr)
+        print 'len: ', len(myStr)
+        if len(myStr) < 19:
+            return False
+        #### Check year and month divisions
+        if myStr[4] != '-' or myStr[7] != '-':
+            print 'Problem with dash'
+            return False
+        #### Check date / time separation
+        if myStr[10] != ' ' and myStr[10] != 'T':
+            print 'Problem with date time separation'
+            return False
+        #### Check time has hour, minute, and second format
+        if myStr[13] != ':' or myStr[16] != ':':
+            print 'problem with hour/min/sec'
+            return False
+        print 'return True'
+        return True
+
+    ### timeStamp should either be of type datetime or
+    ### well-formatted string
+    isTimestampOkList = []
+    for ele in myDataDF['timeStamp'].values:
+        print 'ele: ', ele, ', type: ', type(ele)
+        isOk = False
+        if type(ele) == datetime.datetime or type(ele) == np.datetime64:
+            isOk = True
+            isTimestampOkList.append(isOk)
+            continue
+        try:
+            #### If it's a well-formatted string we are ok
+            if strHasDTFormat(ele):
+                isOk = True
+            else:
+                isOk = False
+                print 'Warning, timeStamp ', ele, ' is bad. Throw out data.'
+        except:
+            print 'Warning, timeStamp ', ele, ' is bad. Throw out data.'
+            isOk = False
+        isTimestampOkList.append(isOk)
+    isTimestampOkMask = np.array(isTimestampOkList, dtype=bool)
+    return myDataDF[isTimestampOkMask]
 
 def convertSafely(ele, desiredType):
     if desiredType is None:
@@ -49,6 +95,9 @@ def main (argv):
     print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
     myDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
+    myDataDF = cleanData(myDataDF)
+
+    myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'], format='%Y-%m-%d %H:%M:%S')
     
     print 'pandas data DF:'
     print myDataDF
@@ -89,19 +138,20 @@ def getRunPeriodDF(myDataDF):
     previousMode = 0
     eventsInThisRun = []
     for thisIdx, thisEvent in myDataDF.iterrows():
+        print 'thisEvent has timestamp: ', thisEvent['timeStamp'], ', type: ', type(thisEvent['timeStamp'])
         try:
             isRunning = int(thisEvent['RunningMode'])
         except:
             isRunning = 0
 
         if previousMode == 1 and isRunning == 0:
-            print 'Append run period'
+            #print 'Append run period'
             runParameters = getRunParameters(eventsInThisRun)
             endRunTime = thisEvent['timeStamp']
             thisRunPeriod = {'beginRunTime': runParameters['beginRunTime'], 'endRunTime': runParameters['endRunTime'],
                     'duration': runParameters['duration'], 'performance': runParameters['performance']}
             listOfRunPeriods.append(thisRunPeriod)
-            print 'listOfRunPeriods is now: ', listOfRunPeriods
+            #print 'listOfRunPeriods is now: ', listOfRunPeriods
 
             ### Clear events from this run to look for new one:
             eventsInThisRun = []
@@ -276,8 +326,15 @@ def getRunParameters(eventsInThisRun):
     runParameters = {}
     runParameters['beginRunTime'] = eventsInThisRun[0]['timeStamp']
     runParameters['endRunTime'] = eventsInThisRun[-1]['timeStamp']
-    runParameters['duration'] = (eventsInThisRun[-1]['timeStamp'] -
-                eventsInThisRun[0]['timeStamp']).total_seconds() / 60.
+
+    #print 'seconds_before :  ', runParameters['beginRunTime'], '  seconds_after : ', runParameters['endRunTime']
+    print 'seconds_before :  ', eventsInThisRun[-1]['timeStamp'],\
+            '  seconds_after : ', eventsInThisRun[0]['timeStamp'],
+    print 'total_seconds :  ', (eventsInThisRun[-1]['timeStamp'] -\
+            eventsInThisRun[0]['timeStamp']).total_seconds()
+
+
+    runParameters['duration'] = (eventsInThisRun[-1]['timeStamp'] - eventsInThisRun[0]['timeStamp']).total_seconds() / 60.
     #print 'duration: ', runParameters['duration']
     insideTemps = [event['InsideTemp'] for event in eventsInThisRun]
     outsideTemps = [event['OutsideTemp'] for event in eventsInThisRun]
