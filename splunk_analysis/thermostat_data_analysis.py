@@ -77,6 +77,20 @@ def convertSafely(ele, desiredType):
     except:
         return np.nan
 
+def convertStringToList(myStr, dtype):
+    ''' Assume we have been given a string of a list.
+    Extract and return the list
+    dtype: this will be the type of the list elements
+    '''
+    assert myStr[0] == '['
+    assert myStr[-1] == ']'
+    ### Convert string of '[1,2,3]' to '1,2,3'
+    contents = myStr[1:-1]
+    ### Now split string into list ('1,2,3' => ['1', '2', '3'])
+    myStringList = contents.split(',')
+    ### Now convert to proper data type
+    outputList = [dtype(ele) for ele in myStringList]
+    return outputList
 
 # Add functions below!
 def main (argv):
@@ -85,16 +99,17 @@ def main (argv):
     start_time = time.time()
     print 'Start of code'
     assert len(argv) == 5
-    thermostatId = int(argv[1])
+    thermostatIdList = convertStringToList(argv[1], dtype=int)
+    print 'thermostatIdList is ', thermostatIdList
     StartTime = argv[2]
     EndTime = argv[3]
     DataType = argv[4]
     
     OutDataType="runPeriodCSV"
 
-    print 'thermostatId = ', thermostatId, ', startTime = ', StartTime, ', endTime = ', EndTime
+    print 'do analysis for thermostats with IDs = ', thermostatIdList, ', startTime = ', StartTime, ', endTime = ', EndTime
     #searchReader = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
-    allTIDsDataDF = doSplunkSearch(thermostatId, StartTime, EndTime, DataType)
+    allTIDsDataDF = doSplunkSearch(thermostatIdList, StartTime, EndTime, DataType)
     #### Now clean any weird formats from data
     allTIDsDataDF = cleanData(allTIDsDataDF)
     allTIDsDataDF['timeStamp'] = pd.to_datetime(allTIDsDataDF['timeStamp'], format='%Y-%m-%d %H:%M:%S')
@@ -136,14 +151,13 @@ def main (argv):
     outFileName = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'.json'
     columnsToSave = [{'var':'beginRunTime', 'type':str}, {'var':'endRunTime', 'type':str},
             {'var':'duration', 'type':float}, {'var':'performance', 'type':float}]
-    dumpRunPeriodResults(totRunPeriodDF, thermostatId, columnsToSave, outFileName)
+    dumpRunPeriodResults(totRunPeriodDF, thermostatIdList, columnsToSave, outFileName)
 
 
 ### initialize header for output .csv file:
     outFileNameCSV = 'output/summary_performance_'+StartTime[0:10]+'_To_'+EndTime[0:10]+'.csv'
     csvColumns = ['id', 'beginRunTime', 'endRunTime','dataType', 'performance', 'duration']
     sizeOfDF = len(totRunPeriodDF.index)
-    totRunPeriodDF['id'] = [thermostatId]*sizeOfDF
     totRunPeriodDF['dataType'] = [OutDataType]*sizeOfDF
     totRunPeriodDF.to_csv(outFileNameCSV, sep=',', columns=csvColumns, header=True, index=False)
 
@@ -167,7 +181,8 @@ def getRunPeriodDF(myDataDF):
             runParameters = getRunParameters(eventsInThisRun)
             endRunTime = thisEvent['timeStamp']
             thisRunPeriod = {'beginRunTime': runParameters['beginRunTime'], 'endRunTime': runParameters['endRunTime'],
-                    'duration': runParameters['duration'], 'performance': runParameters['performance']}
+                    'duration': runParameters['duration'], 'performance': runParameters['performance'],
+                    'id': thisEvent['id']}
             listOfRunPeriods.append(thisRunPeriod)
             #print 'listOfRunPeriods is now: ', listOfRunPeriods
 
@@ -241,7 +256,7 @@ def getPandasDF(searchReader):
     return myDataDF
 
 #### Follow the example here: http://dev.splunk.com/view/python-sdk/SP-CAAAER5#reader
-def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
+def doSplunkSearch(thermostatIdList, StartTime, EndTime, DataType):
         
     #### do splunk search
     #### output = splunkSearch(thermostatId, StartTime, EndTime)
@@ -249,10 +264,14 @@ def doSplunkSearch(thermostatId, StartTime, EndTime, DataType):
     print 'start of doSplunkSearch'
     sys.stdout.flush()
     service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
-    #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table _raw"
-    jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time | table id timeStamp InsideTemp OutsideTemp SetPoint RunningMode"
-    #jobSearchString= "search id="+str(thermostatId)+" dataType="+str(DataType)+" | sort 0 _time"
-                     #table _time InsideTemp OutsideTemp SetPoint RunningMode
+    idSelectionRequirements = []
+    for myID in thermostatIdList:
+        thisIDStr = 'id='+str(myID)
+        idSelectionRequirements.append(thisIDStr)
+    idSelectionStr = '('+(' OR '.join(idSelectionRequirements))+')'
+    jobSearchString= "search "+idSelectionStr+" dataType="+str(DataType)+\
+            " | sort 0 id, _time | table id timeStamp InsideTemp"+\
+            " OutsideTemp SetPoint RunningMode"
     job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
                                                   "earliest_time": StartTime,
                                                   "latest_time": EndTime,
@@ -363,9 +382,10 @@ def getRunParameters(eventsInThisRun):
 
 
 ### write the output in JSON format
-def dumpRunPeriodResults(runPeriodDF, thermostatId, columnsToSave, outFileName):
+def dumpRunPeriodResults(totRunPeriodDF, thermostatIdList, columnsToSave, outFileName):
     outFile = open(outFileName, 'w')
-    for idx, row in runPeriodDF.iterrows():
+    for idx, row in totRunPeriodDF.iterrows():
+        thermostatId = row['id']
         jsonString = '{"id": '+str(thermostatId)
         jsonString += ', "dataType": "runPeriod"'
         for column in columnsToSave:
