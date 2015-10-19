@@ -5,7 +5,7 @@ import sys, getopt, math
 import argparse
 
 
-def getSeasonalBaselineTemp(month, day, hour, minute, avgBaselineTemp=60):
+def getSeasonalBaselineTemp(month, day, hour, minute, avgBaselineTemp=60, seasonalWeatherVariation=0.4):
     dayOfYear = None
     if month == 1: dayOfYear = day
     elif month == 2: dayOfYear = day+31
@@ -25,7 +25,7 @@ def getSeasonalBaselineTemp(month, day, hour, minute, avgBaselineTemp=60):
     print 'radians: ', radiansThroughYear
     weatherTerm = -1.*math.cos(radiansThroughYear-0.1)
     print 'weatherTerm: ', weatherTerm
-    seasonalTemp = avgBaselineTemp * (1. +(0.4*weatherTerm))
+    seasonalTemp = avgBaselineTemp * (1. +(seasonalWeatherVariation*weatherTerm))
     return seasonalTemp
 
 
@@ -94,7 +94,6 @@ def main(argv):
     assert inArgs.deviceType in deviceTypes
 
 
-    hvac_id=56
     dataType="fullSim"
     temp_in=78.00
     setpoint=78.00
@@ -107,7 +106,6 @@ def main(argv):
     simulated_current_time = inArgs.startTime
     prev_simulated_time = simulated_current_time
 
-    insulation = 300.
     ac_power = 1.
     ac_span = 0.5
     avgBaselineTemp = 65
@@ -133,11 +131,12 @@ def main(argv):
         simulated_current_hour = simulated_current_time.hour
         simulated_current_minute = simulated_current_time.minute
         seasonal_baseline_temp = getSeasonalBaselineTemp(simulated_current_month, simulated_current_day,
-                                     simulated_current_hour, simulated_current_minute)
+                                     simulated_current_hour, simulated_current_minute, inArgs.avgBaselineTemp,
+                                     inArgs.seasonalWeatherVariation)
         baseline_temp = seasonal_baseline_temp  ## maybe add in day-to-day non-seasonal variations later?
         temp_out = get_temp_for_time(simulated_current_hour, simulated_current_minute, baseline_temp)
         prev_temp_in = temp_in
-        temp_in = get_temp_in(prev_temp_in, temp_out, running_mode, delta_simulated_time.seconds / 60., insulation, ac_power)
+        temp_in = get_temp_in(prev_temp_in, temp_out, running_mode, delta_simulated_time.seconds / 60., inArgs.insulation, ac_power)
         prev_running_mode = running_mode
         running_mode = get_running_mode(prev_running_mode, setpoint, temp_in, ac_span)
         print 'simulated_time: ',\
@@ -152,19 +151,19 @@ def main(argv):
         write_running_mode = True if running_mode != previous_running_mode_write else False
         if write_temp_out:
             previous_temp_out_write_time = simulated_current_time
-            write_output_CSV(hvac_id, simulated_current_time,dataType=dataType, value=temp_out,
+            write_output_CSV(inArgs.hvac_id, simulated_current_time,dataType=dataType, value=temp_out,
                     columnName='temp_out', out_file=out_file, csvColumns=csvColumns)
         if write_temp_in:
             previous_temp_in_write = temp_in
-            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=temp_in,
+            write_output_CSV(inArgs.hvac_id, simulated_current_time, dataType=dataType, value=temp_in,
                     columnName='temp_in', out_file=out_file, csvColumns=csvColumns)
         if write_setpoint:
             previous_setpoint_write_time = simulated_current_time
-            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=setpoint,
+            write_output_CSV(inArgs.hvac_id, simulated_current_time, dataType=dataType, value=setpoint,
                     columnName='setpoint', out_file=out_file, csvColumns=csvColumns)
         if write_running_mode:
             previous_running_mode_write = running_mode
-            write_output_CSV(hvac_id, simulated_current_time, dataType=dataType, value=running_mode,
+            write_output_CSV(inArgs.hvac_id, simulated_current_time, dataType=dataType, value=running_mode,
                     columnName='running_mode', out_file=out_file, csvColumns=csvColumns)
         prev_simulated_time=simulated_current_time
         #time.sleep(5)
@@ -182,6 +181,11 @@ if __name__ == "__main__":
     parser.add_argument('--outFileName', type=str)
     parser.add_argument('--deviceType', type=str)
     parser.add_argument('--houseId', type=int)
+    parser.add_argument('--hvac_id', type=int)
+    parser.add_argument('--insulation', type=float)
+    parser.add_argument('--avgBaselineTemp', type=float)
+    parser.add_argument('--seasonalWeatherVariation', type=float)
+
     main(parser)
 
 
