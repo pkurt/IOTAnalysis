@@ -22,6 +22,17 @@ import io
 from email.mime.text import MIMEText
 import datetime
 
+def convertDateTimeStringToDate(dt):
+    myDatetime = datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%S")
+    myDateString = myDatetime.strftime("%Y-%m-%d")
+    return myDateString
+
+def fixBrokenTimeFormat(dtString):
+    #### Example :
+    #2014-11-18T00:00:00.000-08:00
+    return dtString[:19]
+
+
 # To identify the test starting point I look for spike in the power.
 # You will look for 5% increase of the whole house power which you get from the side bands.
 # We can also develop a more sophisticated algorithm. We can apply fit to the side band to estimate the bkg.
@@ -148,10 +159,10 @@ def main (argv):
     EndTime = argv[3]
     print 'smartplugId = ', smartplugId, ', startTime = ', StartTime, ', endTime = ', EndTime
 
-    searchReader = doSplunkSearch(smartplugId, StartTime, EndTime)
-    #print 'now getPandasDF'
-    sys.stdout.flush()
-    myDataDF = getPandasDF(searchReader)
+    myDataDF = doSplunkSearch(smartplugId, StartTime, EndTime)
+#    #print 'now getPandasDF'
+#    sys.stdout.flush()
+#    myDataDF = getPandasDF(searchReader)
 
     peaks = getPeaks(myDataDF)
     #print 'now getRunPeriodDF'
@@ -202,21 +213,18 @@ def getPandasDF(searchReader):
     myData = []
     print 'read data in getPandasDF'
     sys.stdout.flush()
-
-
-    lineNum = 0
-    #print 'searchReader has type: ', type(searchReader)
+    
+    print 'searchReader has type: ', type(searchReader)
     for line in searchReader:
-        #print 'line: ', line
-#        if lineNum % 50 == 0: print 'lineNum: ', lineNum
+        print 'line: ', line
         thisDict = json.loads(line['_raw'])
         myData.append(thisDict)
-        lineNum += 1
-        #print 'this row is: ', thisDict
-        #if lineNum % 50 == 0: print 'PowerUsage is: ', thisDict['powerUsage']
     myDataDF = pd.DataFrame(myData)
-    myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
-   # print 'sort data in getPandasDF'
+    print 'timeStamps:  ', myDataDF['timeStamp']
+    print 'is problem here? ' 
+    myDataDF['timeStamp'] = pd.to_datetime([fixBrokenTimeFormat(ele) for ele in myDataDF['timeStamp'].values])
+    #myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
+    print 'sort data in getPandasDF'
     sys.stdout.flush()
     myDataDF = myDataDF.sort('timeStamp')
     sys.stdout.flush()
@@ -226,19 +234,51 @@ def getPandasDF(searchReader):
 def doSplunkSearch(smartplugId, StartTime, EndTime):
         
     #### do splunk search
-    #### output = splunkSearch(smartplugId, StartTime, EndTime)
     #### Organize into pandas dataFrame, myDataDF
-    service = client.connect(host='localhost', port=8089, username='admin', password='xxxxxx')
+    service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
     #print 'got service, now make job'
-    kwargs_oneshot={"earliest_time": StartTime,
-                    "latest_time": EndTime,
-                    "count": 0}
-    jobSearchString= "search id="+str(smartplugId)+" | sort _time "
-   # print 'jobSearchName: ', jobSearchString
-    job_results = service.jobs.oneshot(jobSearchString, **kwargs_oneshot)
-    reader = results.ResultsReader(io.BufferedReader(responseReaderWrapper.ResponseReaderWrapper(job_results)))
-    #reader = results.ResultsReader(job_results)
-    return reader
+    jobSearchString= "search id="+str(smartplugId)+" | sort 0 _time "
+    job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
+                          "earliest_time": StartTime,
+                          "latest_time": EndTime,
+                          "maxEvents": 5000000})
+
+    print 'created job'
+    sys.stdout.flush()
+    resultCount = int(job["resultCount"])
+    offset = 0   ## start at result 0
+    count = 50000    # Get sets of this many results at one time
+    thru_counter = 0
+
+    resultingDF = None
+    print 'print loop with resultCount = ', resultCount
+    sys.stdout.flush()
+    while(offset < resultCount):
+        print 'Do group starting at offset ', offset
+        sys.stdout.flush()
+        kwargs_paginate = {"count": count, "offset": offset}
+    
+        rs = job.results(**kwargs_paginate)
+        reader = results.ResultsReader(io.BufferedReader(rs))
+    
+        if offset == 0:   ### first time
+            print 'Before getting original DF'
+            sys.stdout.flush()
+            resultingDF = getPandasDF(reader)
+            print 'got original DF'
+            sys.stdout.flush()
+        else:
+            print 'Before adding DF, resultingDF: ', resultingDF
+            sys.stdout.flush()
+            resultingDF = resultingDF.append(getPandasDF(reader), ignore_index=True)
+        offset += count
+        print 'After adding DF, resultingDF: ', resultingDF
+        sys.stdout.flush()
+    print 'Done with splunk search'
+    sys.stdout.flush()
+    return resultingDF
+
+
 
 def draw_plots(myDataDF, peakInfoObjects):
     #print 'Now make plots for ', myDataDF
