@@ -32,6 +32,70 @@ def fixBrokenTimeFormat(dtString):
     #2014-11-18T00:00:00.000-08:00
     return dtString[:19]
 
+def convertStringToList(myStr, dtype):
+    ''' Assume we have been given a string of a list.
+        Extract and return the list
+        dtype: this will be the type of the list elements
+        '''
+    assert myStr[0] == '['
+    assert myStr[-1] == ']'
+    ### Convert string of '[1,2,3]' to '1,2,3'
+    contents = myStr[1:-1]
+    ### Now split string into list ('1,2,3' => ['1', '2', '3'])
+    myStringList = contents.split(',')
+    ### Now convert to proper data type
+    outputList = [dtype(ele) for ele in myStringList]
+    return outputList
+
+
+def cleanData(myDataDF):
+    ''' Write in any cleaning requirements '''
+    def strHasDTFormat(myStr):
+        print 'str: ', myStr, ', type: ', type(myStr)
+        print 'len: ', len(myStr)
+        if len(myStr) < 19:
+            return False
+        #### Check year and month divisions
+        if myStr[4] != '-' or myStr[7] != '-':
+            print 'Problem with dash'
+            return False
+        #### Check date / time separation
+        if myStr[10] != ' ' and myStr[10] != 'T':
+            print 'Problem with date time separation'
+            return False
+        #### Check time has hour, minute, and second format
+        if myStr[13] != ':' or myStr[16] != ':':
+            print 'problem with hour/min/sec'
+            return False
+        print 'return True'
+        return True
+    
+    ### timeStamp should either be of type datetime or
+    ### well-formatted string
+    isTimestampOkList = []
+    for ele in myDataDF['timeStamp'].values:
+        print 'ele: ', ele, ', type: ', type(ele)
+        isOk = False
+        if type(ele) == datetime.datetime or type(ele) == np.datetime64:
+            isOk = True
+            isTimestampOkList.append(isOk)
+            continue
+        try:
+            #### If it's a well-formatted string we are ok
+            if strHasDTFormat(ele):
+                isOk = True
+            else:
+                isOk = False
+                print 'Warning, timeStamp ', ele, ' is bad. Throw out data.'
+        except:
+            print 'Warning, timeStamp ', ele, ' is bad. Throw out data.'
+            isOk = False
+        isTimestampOkList.append(isOk)
+    isTimestampOkMask = np.array(isTimestampOkList, dtype=bool)
+    return myDataDF[isTimestampOkMask]
+
+
+
 
 # To identify the test starting point I look for spike in the power.
 # You will look for 5% increase of the whole house power which you get from the side bands.
@@ -154,59 +218,41 @@ def main (argv):
     start_time = time.time()
     print 'Start of code'
     assert len(argv) == 4
-    smartplugId = int(argv[1])
+    #smartplugId = int(argv[1])
+    smartplugIdList = convertStringToList(argv[1], dtype=int)
+    print 'smartplugIdList is ', smartplugIdList
     StartTime = argv[2]
     EndTime = argv[3]
-    print 'smartplugId = ', smartplugId, ', startTime = ', StartTime, ', endTime = ', EndTime
+    print 'smartplugId = ', smartplugIdList, ', startTime = ', StartTime, ', endTime = ', EndTime
 
-    myDataDF = doSplunkSearch(smartplugId, StartTime, EndTime)
-#    #print 'now getPandasDF'
-#    sys.stdout.flush()
-#    myDataDF = getPandasDF(searchReader)
+    myDataDF = doSplunkSearch(smartplugIdList, StartTime, EndTime)
+    #### Now clean any weird formats from data
+    myDataDF = cleanData(myDataDF)
+    myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'], format='%Y-%m-%d %H:%M:%S')
+    
+    #### Now split into individual thermostats and do analysis:
+    myIDs = np.unique(myDataDF['id'].values)
 
-    peaks = getPeaks(myDataDF)
-    #print 'now getRunPeriodDF'
-    sys.stdout.flush()
-    #runPeriodDF = getRunPeriodDF(myDataDF)
-    print 'draw plots including peaks: ', peaks
-    draw_plots(myDataDF, peaks)
-    #checkForAlert(myDataDF, runPeriodDF)
+    for myID in myIDs:
+        print 'Do analysis for electric device ', myID
+        #### Get dataframe for this ID:
+        thisEDDF = myDataDF[myDataDF['id'] == myID]
+        #print 'Number of events is ', len(thisTIDDF.index)
+        print 'now getRunPeriodDF'
+        sys.stdout.flush()
+
+        #### Make plots for this thermostat
+        if len(thisEDDF.index)> 0:
+            peaks = getPeaks(thisEDDF)
+            sys.stdout.flush()
+            print 'draw plots including peaks: ', peaks
+            draw_plots(thisEDDF, peaks, myID)
+            sys.stdout.flush()
+    
     runtime = time.time() - start_time
     sys.stdout.flush()
     print 'It took ', str(runtime), ' to run'
     sys.stdout.flush()
-#
-#def getRunPeriodDF(myDataDF):
-#    listOfRunPeriods = []
-#    #print 'getRunPeriodDF'
-#    previousMode = 0
-##    beginRunTime = None
-##    endRunTime = None
-#    eventsInThisRun = []
-#    for thisIdx, thisEvent in myDataDF.iterrows():
-#        isRunning = thisEvent['RunningMode']
-#     #   print 'thisEvent: ', thisEvent
-#      #  print 'isRunning: ', isRunning, ', type: ', type(isRunning)
-#        if previousMode == 1 and isRunning == False:
-#            runParameters = getRunParameters(eventsInThisRun)
-#
-#            endRunTime = thisEvent['timeStamp']
-#            print 'append beginRunTime: ', runParameters['beginRunTime'], ', end: ', runParameters['endRunTime']
-#            thisRunPeriod = {'beginRunTime': runParameters['beginRunTime'], 'endRunTime': runParameters['endRunTime'],
-#                    'duration': runParameters['duration'], 'performance': runParameters['performance']}
-#            listOfRunPeriods.append(thisRunPeriod)
-#
-#            ### Clear events from this run to look for new one:
-#            eventsInThisRun = []
-#        if isRunning:
-#            eventsInThisRun.append(thisEvent)
-#        previousMode = thisEvent['RunningMode']
-#
-#    #### Got all run periods, now build pandas dataframe
-#    #print 'Define runPeriodDF from ', listOfRunPeriods
-#    runPeriodDF = pd.DataFrame(listOfRunPeriods)
-#    return runPeriodDF
-#
 
 def getPandasDF(searchReader):
     print 'getPandasDF'
@@ -223,7 +269,6 @@ def getPandasDF(searchReader):
     print 'timeStamps:  ', myDataDF['timeStamp']
     print 'is problem here? ' 
     myDataDF['timeStamp'] = pd.to_datetime([fixBrokenTimeFormat(ele) for ele in myDataDF['timeStamp'].values])
-    #myDataDF['timeStamp'] = pd.to_datetime(myDataDF['timeStamp'])
     print 'sort data in getPandasDF'
     sys.stdout.flush()
     myDataDF = myDataDF.sort('timeStamp')
@@ -231,13 +276,19 @@ def getPandasDF(searchReader):
     return myDataDF
 
 #### Follow the example here: http://dev.splunk.com/view/python-sdk/SP-CAAAER5#reader
-def doSplunkSearch(smartplugId, StartTime, EndTime):
+def doSplunkSearch(smartplugIdList, StartTime, EndTime):
         
     #### do splunk search
     #### Organize into pandas dataFrame, myDataDF
     service = client.connect(host='localhost', port=8089, username='admin', password='Pg18december')
+    idSelectionRequirements = []
+    for myID in smartplugIdList:
+        thisIDStr = 'id='+str(myID)
+        idSelectionRequirements.append(thisIDStr)
+    idSelectionStr = '('+(' OR '.join(idSelectionRequirements))+')'
+
     #print 'got service, now make job'
-    jobSearchString= "search id="+str(smartplugId)+" | sort 0 _time "
+    jobSearchString= "search "+idSelectionStr+" | sort 0 _time "
     job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
                           "earliest_time": StartTime,
                           "latest_time": EndTime,
@@ -280,16 +331,17 @@ def doSplunkSearch(smartplugId, StartTime, EndTime):
 
 
 
-def draw_plots(myDataDF, peakInfoObjects):
+def draw_plots(myDataDF, peakInfoObjects, myID):
     #print 'Now make plots for ', myDataDF
 
     #### First make inclusive plot:
-    xKey='timeStamp'
-    #myPdf = PdfPages('PowerSummary_LaundryDryer.pdf')
-    #myPdf = PdfPages('PowerSummary_HairDryer.pdf')
-    #myPdf = PdfPages('PowerSummary_Microwave.pdf')
-    myPdf = PdfPages('PowerSummary_Blender.pdf')
-    #myPdf = PdfPages('PowerSummary_LightBulb.pdf')
+    xKey='timeStamp'    
+    myPdf = PdfPages('images/plots_for_ID_'+ str(myID) + 'PowerSummary_LightBulb.pdf')
+    #myPdf = PdfPages('images/plots_for_ID_'+ str(myID) + 'PowerSummary_Microwave.pdf')
+    #myPdf = PdfPages('images/plots_for_ID_'+ str(myID) + 'PowerSummary_HairDryer.pdf')
+    #myPdf = PdfPages('images/plots_for_ID_'+ str(myID) + 'PowerSummary_LaundaryDryer.pdf')
+
+
     chartOptionsDict = {'powerUsage': {'color': 'blue', 'style': '-'}
                        }
     plotOptionsDict = {'xlabel': 'Time', 'ylabel': 'Power usage [Watts]', 
