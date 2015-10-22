@@ -52,7 +52,7 @@ class parseJsonFile():
                 print 'found some data to save: ', dataToSave
                 # append jsons to self.jsonBuffer
                 self.dataBuffer.append(dataToSave)
-        print 'done with json file, final data to save buffer is : ', self.dataBuffer
+        print ', final data to save buffer is : ', self.dataBuffer
 
     def convertData(self, myjson):
         ''' From full input json, extract data we care about,
@@ -92,19 +92,60 @@ class parseJsonFile():
         return dataToSave
 
     
-    def saveOutput(self, fillMissingValues=False):
-        ''' From data buffer create output dataframe
-        Save outputDF to self.outputFileName
-        Create output file if it does not already exist
-        Otherwise append to output file
-        Finally, clear self.dataBuffer '''
+#def saveOutput(self, fillMissingValues=False):
+#''' From data buffer create output dataframe
+#       Save outputDF to self.outputFileName
+#       Create output file if it does not already exist
+#       Otherwise append to output file
+#       Finally, clear self.dataBuffer '''
 
-        print 'Now build pandas data frame'
+        #       print 'Now build pandas data frame'
+        #outDF = pd.DataFrame(self.dataBuffer)
+        #print 'outDF is ', outDF
+            #if fillMissingValues:
+            #outDF = outDF.fillna(method='pad')
+        #print 'after filling missing values, outDF is ', outDF
+#outDF.to_csv(self.outputFileName, index=False)
+
+
+    def saveOutput(self):
+        def removeMissingValues(inDict):
+            def isValueValid(value):
+                #print 'is value ', value, ' a missing value?'
+                if value is None: return False
+                ### is value nan?
+                try:
+                    #print 'check if value is nan'
+                    if np.isnan(value): return False
+                    else: return True
+                except:
+                    #### Probably crashed because it's a string
+                    #### Value is not missing
+                    return True
+                
+            outDict = dict((key, value) for key, value in inDict.iteritems() if isValueValid(value))
+            return outDict
+
         outDF = pd.DataFrame(self.dataBuffer)
-        print 'outDF is ', outDF
-        if fillMissingValues:
-            outDF = outDF.fillna(method='pad')
-            print 'after filling missing values, outDF is ', outDF
-        outDF.to_csv(self.outputFileName, index=False)
+        ### First convert data frame to list of dictionaries:
+        outDict = outDF.to_dict('records')
+        ### Now convert list of dictionaries to list of strings
+        outList = [json.dumps(removeMissingValues(record))+"\n" for record in outDict]
+        ### Now save strings to output JSON file
+        open(self.outputFileName, 'w').writelines(outList)
+        
+        
+        #print 'outDF: ', outDF
+        #for ridx, row in outDF.iterrows():
+            #    #jsonString += ' "dataType": "convertedData"'
+            #print 'line: ', line
+            #jsonString += ', "timeStamp": "'+ fixBrokenTimeFormat(line['_time'])+'", '
+            #jsonString += '},'
+            #outFile.write(jsonString+'\n')
+        #outFile.close()
+#outDF.to_csv(self.outputFileName, index=False)
+
+
+
 
 
