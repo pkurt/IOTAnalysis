@@ -194,7 +194,9 @@ def getPeaks(dataDF):
     currentPeakInfo = {}
 
 
+    print 'get deltaTime for ', dataDF
     dataDF['deltaTime'] = dataDF['timeStamp'].diff()
+    print 'diffs are: ', dataDF['deltaTime'].values
     for thisIdx, thisEvent in dataDF.iterrows():
         if (thisIdx==0):
             continue
@@ -253,6 +255,13 @@ def main (argv):
         print 'Do analysis for electric device ', myID
         #### Get dataframe for this ID:
         thisEDDF = myDataDF[myDataDF['id'] == myID]
+        #### re-index this data frame to start from zero:
+        print 'for id: ', myID, ', len: ', len(thisEDDF.index), ', get new index'
+        print 'Before indexing, DF is ', thisEDDF
+        thisEDDF['new_index'] = range(len(thisEDDF.index))
+        print 'new_index is ', thisEDDF['new_index']
+        thisEDDF = thisEDDF.set_index('new_index')
+        print 'After setting index, DF is ', thisEDDF
         #print 'Number of events is ', len(thisTIDDF.index)
         print 'now getRunPeriodDF'
         sys.stdout.flush()
@@ -277,10 +286,12 @@ def getPandasDF(searchReader):
     sys.stdout.flush()
     
     print 'searchReader has type: ', type(searchReader)
+    lineNum = 0
     for line in searchReader:
-        print 'line: ', line
+        if lineNum % 100 == 0 : print 'line: ', line
         thisDict = json.loads(line['_raw'])
         myData.append(thisDict)
+        lineNum += 1
     myDataDF = pd.DataFrame(myData)
     print 'timeStamps:  ', myDataDF['timeStamp']
     print 'is problem here? ' 
