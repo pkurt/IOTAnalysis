@@ -321,7 +321,7 @@ def doSplunkSearch(smartplugIdList, StartTime, EndTime):
     idSelectionStr = '('+(' OR '.join(idSelectionRequirements))+')'
     
     #print 'got service, now make job'
-    jobSearchString= "search "+idSelectionStr+" | sort 0 _time "
+    jobSearchString= "search "+idSelectionStr+" | sort 0 id, _time "
     job = service.jobs.create(jobSearchString, **{"exec_mode": "blocking",
                               "earliest_time": StartTime,
                               "latest_time": EndTime,
