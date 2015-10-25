@@ -194,10 +194,10 @@ def getPeaks(dataDF):
     currentPeakInfo = {}
 
 
+    dataDF['deltaTime'] = dataDF['timeStamp'].diff()
     for thisIdx, thisEvent in dataDF.iterrows():
         if (thisIdx==0):
             continue
-        thisEvent['timeStamp'] = thisEvent.index
         print 'thisIdx', thisIdx, 'thisEvent_timeStamp : ', thisEvent['timeStamp']
         #thisEvent['delta'] = (thisEvent['timeStamp']-thisEvent['timeStamp'].shift(1))
         
@@ -208,13 +208,13 @@ def getPeaks(dataDF):
         # print 'deltaTime : ', thisEvent['delta']
 
 #if inTesting == False and thisEvent['isTesting'] == 1:
-        if inTesting == False and deltaTimeFrequency==1 :
+        if inTesting == False and thisEvent['deltaTime']==np.timedelta64(1, 's'):
             inTesting = True
             currentPeakInfo['startTestIndex'] = thisIdx
             currentPeakInfo['startTestTime'] = thisEvent['timeStamp']
         
 #if thisEvent['isTesting'] == 0 and inTesting == True:
-        if deltaTimeFrequency == 12 and inTesting == True:
+        if inTesting == True and thisEvent['deltaTime']==np.timedelta64(12, 's'):
             inTesting = False
             currentPeakInfo['endTestIndex'] = thisIdx-1
             currentPeakInfo['endTestTime'] = previousTimestamp
